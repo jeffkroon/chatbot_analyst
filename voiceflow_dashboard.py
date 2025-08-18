@@ -328,8 +328,13 @@ def analyze_course_choices(evaluation_results):
         course_name = result['evaluation_value']
         transcript_id = result['transcript_id']
         
-        # Skip None, empty, or invalid course names
-        if not course_name or course_name == 'None' or course_name == '' or course_name is None:
+        # Skip None, empty, or invalid course names - meer strikte filtering
+        if (not course_name or 
+            course_name == 'None' or 
+            course_name == '' or 
+            course_name is None or
+            str(course_name).lower() == 'none' or
+            str(course_name).strip() == ''):
             continue
         
         if course_name in course_counts:
@@ -342,6 +347,9 @@ def analyze_course_choices(evaluation_results):
             'transcript_id': transcript_id,
             'chosen_at': datetime.now().isoformat()  # We hebben geen timestamp, dus gebruiken we nu
         })
+    
+    # Extra filter: verwijder alle cursussen met 0 counts (voor de zekerheid)
+    course_counts = {k: v for k, v in course_counts.items() if v > 0}
     
     # Sorteer op populariteit
     sorted_courses = sorted(course_counts.items(), key=lambda x: x[1], reverse=True)
@@ -390,8 +398,16 @@ def show_course_analytics(complete_data):
     st.subheader("📈 Course Popularity")
     
     if course_analysis['sorted_courses']:
+        # Filter out any remaining None or invalid values
+        valid_courses = [(name, count) for name, count in course_analysis['sorted_courses'] 
+                         if name and name != 'None' and str(name).lower() != 'none' and str(name).strip() != '']
+        
+        if not valid_courses:
+            st.info("Geen geldige cursus data beschikbaar voor visualisatie")
+            return
+        
         # Top 10 cursussen
-        top_courses = course_analysis['sorted_courses'][:10]
+        top_courses = valid_courses[:10]
         course_names = [course[0] for course in top_courses]
         course_counts = [course[1] for course in top_courses]
         
@@ -438,9 +454,9 @@ def show_course_analytics(complete_data):
     # Detailed course table
     st.subheader("📋 Detailed Course Analysis")
     
-    # Maak een mooie tabel met alle cursussen
+    # Maak een mooie tabel met alle cursussen (gebruik valid_courses)
     course_table_data = []
-    for i, (course_name, count) in enumerate(course_analysis['sorted_courses']):
+    for i, (course_name, count) in enumerate(valid_courses):
         percentage = (count / course_analysis['total_choices']) * 100
         course_table_data.append({
             'Rank': i + 1,
@@ -461,8 +477,8 @@ def show_course_analytics(complete_data):
     # Course insights
     st.subheader("💡 Course Insights")
     
-    if course_analysis['sorted_courses']:
-        top_course = course_analysis['sorted_courses'][0]
+    if valid_courses:
+        top_course = valid_courses[0]
         top_percentage = (top_course[1] / course_analysis['total_choices']) * 100
         
         col1, col2 = st.columns(2)
@@ -475,8 +491,8 @@ def show_course_analytics(complete_data):
         
         with col2:
             st.write("**📊 Distribution Insights:**")
-            if len(course_analysis['sorted_courses']) >= 3:
-                top_3_total = sum(course[1] for course in course_analysis['sorted_courses'][:3])
+            if len(valid_courses) >= 3:
+                top_3_total = sum(course[1] for course in valid_courses[:3])
                 top_3_percentage = (top_3_total / course_analysis['total_choices']) * 100
                 st.write(f"- Top 3 cursussen: {top_3_percentage:.1f}% van alle keuzes")
             
