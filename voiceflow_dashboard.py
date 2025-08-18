@@ -308,26 +308,6 @@ def show_enhanced_evaluation_results(complete_data, df_evaluations):
         if selected_eval:
             show_evaluation_details(selected_eval, eval_analysis[selected_eval])
     
-    # Summary table
-    st.subheader("📋 Summary Table")
-    summary_data = []
-    for eval_name, data in eval_analysis.items():
-        summary_row = {
-            'Evaluation': eval_name,
-            'Type': data['type'],
-            'Total Runs': data['total_runs'],
-        }
-        
-        if data['success_rate'] is not None:
-            summary_row['Success Rate'] = f"{data['success_rate']:.1f}%"
-        
-        if data['avg_rating'] is not None:
-            summary_row['Avg Rating'] = f"{data['avg_rating']:.2f}"
-        
-        summary_data.append(summary_row)
-    
-    st.dataframe(pd.DataFrame(summary_data), use_container_width=True)
-
 # ===== COURSE ANALYTICS =====
 def analyze_course_choices(evaluation_results):
     """Analyseer welke cursussen het meest worden gekozen"""
@@ -348,6 +328,10 @@ def analyze_course_choices(evaluation_results):
         course_name = result['evaluation_value']
         transcript_id = result['transcript_id']
         
+        # Skip None, empty, or invalid course names
+        if not course_name or course_name == 'None' or course_name == '' or course_name is None:
+            continue
+        
         if course_name in course_counts:
             course_counts[course_name] += 1
         else:
@@ -363,7 +347,7 @@ def analyze_course_choices(evaluation_results):
     sorted_courses = sorted(course_counts.items(), key=lambda x: x[1], reverse=True)
     
     return {
-        'total_choices': len(course_results),
+        'total_choices': len(course_details),  # Gebruik course_details in plaats van course_results
         'unique_courses': len(course_counts),
         'course_counts': course_counts,
         'sorted_courses': sorted_courses,
@@ -377,8 +361,8 @@ def show_course_analytics(complete_data):
     evaluation_results = complete_data.get('evaluation_results', [])
     course_analysis = analyze_course_choices(evaluation_results)
     
-    if not course_analysis:
-        st.info("Geen course keuze data beschikbaar")
+    if not course_analysis or course_analysis['total_choices'] == 0:
+        st.info("Geen geldige course keuze data beschikbaar")
         return
     
     # Overview metrics
