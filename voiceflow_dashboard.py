@@ -546,6 +546,252 @@ def show_course_analytics(complete_data):
                 mime="text/csv"
             )
 
+# ===== COMPREHENSIVE REPORT GENERATION =====
+def generate_transcript_report(complete_data, df_evaluations):
+    """Genereer een uitgebreide transcript rapportage"""
+    if not complete_data:
+        return None
+    
+    transcripts = complete_data.get('transcripts', [])
+    evaluation_results = complete_data.get('evaluation_results', [])
+    
+    if not transcripts:
+        return None
+    
+    # Samenvatting van alle transcripts
+    report = {
+        'generated_at': datetime.now().isoformat(),
+        'total_transcripts': len(transcripts),
+        'total_evaluations': len(evaluation_results),
+        'summary': {},
+        'ai_performance_analysis': {},
+        'sample_conversations': [],
+        'evaluation_results': {},
+        'highlights': []
+    }
+    
+    # AI Performance Analysis
+    ai_errors = []
+    ai_successes = []
+    
+    for transcript in transcripts:
+        transcript_id = transcript.get('id', 'Unknown')
+        evaluations = transcript.get('evaluations', [])
+        
+        # Check voor AI fouten (bijvoorbeeld lage scores of negatieve feedback)
+        for eval_item in evaluations:
+            eval_name = eval_item.get('name', '')
+            eval_value = eval_item.get('value')
+            
+            # Identificeer mogelijke AI fouten
+            if eval_name == 'Conversation quality' and isinstance(eval_value, (int, float)):
+                if eval_value < 3:  # Laag score
+                    ai_errors.append({
+                        'transcript_id': transcript_id,
+                        'issue': f'Lage conversatie kwaliteit: {eval_value}/5',
+                        'evaluation': eval_name,
+                        'value': eval_value
+                    })
+                elif eval_value >= 4:  # Hoog score
+                    ai_successes.append({
+                        'transcript_id': transcript_id,
+                        'achievement': f'Hoge conversatie kwaliteit: {eval_value}/5',
+                        'evaluation': eval_name,
+                        'value': eval_value
+                    })
+            
+            elif eval_name == 'User satisfaction' and isinstance(eval_value, (int, float)):
+                if eval_value < 3:
+                    ai_errors.append({
+                        'transcript_id': transcript_id,
+                        'issue': f'Lage gebruikersatisfactie: {eval_value}/5',
+                        'evaluation': eval_name,
+                        'value': eval_value
+                    })
+    
+    report['ai_performance_analysis'] = {
+        'total_errors': len(ai_errors),
+        'total_successes': len(ai_successes),
+        'error_rate': (len(ai_errors) / len(transcripts)) * 100 if transcripts else 0,
+        'success_rate': (len(ai_successes) / len(transcripts)) * 100 if transcripts else 0,
+        'errors': ai_errors,
+        'successes': ai_successes
+    }
+    
+    # Sample conversations (steekproef van 5 transcripts)
+    import random
+    sample_size = min(5, len(transcripts))
+    sample_transcripts = random.sample(transcripts, sample_size) if transcripts else []
+    
+    for transcript in sample_transcripts:
+        sample_convo = {
+            'transcript_id': transcript.get('id', 'Unknown'),
+            'session_id': transcript.get('sessionID', 'Unknown'),
+            'created_at': transcript.get('createdAt', 'Unknown'),
+            'evaluations': transcript.get('evaluations', []),
+            'properties': transcript.get('properties', []),
+            'summary': f"Transcript met {len(transcript.get('evaluations', []))} evaluaties"
+        }
+        report['sample_conversations'].append(sample_convo)
+    
+    # Evaluation results samenvatting
+    eval_summary = {}
+    for result in evaluation_results:
+        eval_name = result['evaluation_name']
+        eval_value = result['evaluation_value']
+        
+        if eval_name not in eval_summary:
+            eval_summary[eval_name] = {
+                'total_runs': 0,
+                'values': [],
+                'value_distribution': {}
+            }
+        
+        eval_summary[eval_name]['total_runs'] += 1
+        eval_summary[eval_name]['values'].append(eval_value)
+        
+        # Value distribution
+        if eval_value in eval_summary[eval_name]['value_distribution']:
+            eval_summary[eval_name]['value_distribution'][eval_value] += 1
+        else:
+            eval_summary[eval_name]['value_distribution'][eval_value] = 1
+    
+    report['evaluation_results'] = eval_summary
+    
+    # Highlights en insights
+    highlights = []
+    
+    # AI Performance highlights
+    if ai_errors:
+        highlights.append(f"🚨 {len(ai_errors)} AI fouten gedetecteerd - aandacht vereist")
+    
+    if ai_successes:
+        highlights.append(f"✅ {len(ai_successes)} succesvolle AI interacties")
+    
+    # Course choice highlights
+    course_analysis = analyze_course_choices(evaluation_results)
+    if course_analysis and course_analysis['sorted_courses']:
+        top_course = course_analysis['sorted_courses'][0]
+        highlights.append(f"🎯 Meest populaire cursus: {top_course[0]} ({top_course[1]} keuzes)")
+    
+    # Evaluation highlights
+    for eval_name, data in eval_summary.items():
+        if data['total_runs'] > 0:
+            avg_value = sum(data['values']) / len(data['values']) if data['values'] else 0
+            highlights.append(f"📊 {eval_name}: {data['total_runs']} runs, gemiddelde: {avg_value:.2f}")
+    
+    report['highlights'] = highlights
+    
+    return report
+
+def show_report_generation(complete_data, df_evaluations):
+    """Toon rapportage generatie en download opties"""
+    st.header("📋 Comprehensive Transcript Report")
+    st.markdown("Genereer een uitgebreide rapportage van alle transcripts met AI performance analyse en highlights.")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("🔍 Generate Report", type="primary"):
+            with st.spinner("Genereren van uitgebreide rapportage..."):
+                report = generate_transcript_report(complete_data, df_evaluations)
+                
+                if report:
+                    st.session_state['generated_report'] = report
+                    st.success("✅ Rapportage succesvol gegenereerd!")
+                else:
+                    st.error("❌ Kon geen rapportage genereren")
+    
+    with col2:
+        if st.button("📊 Download Report"):
+            if 'generated_report' in st.session_state:
+                report = st.session_state['generated_report']
+                
+                # Maak JSON download
+                import json
+                json_data = json.dumps(report, indent=2, default=str)
+                
+                st.download_button(
+                    label="📥 Download Full Report (JSON)",
+                    data=json_data,
+                    file_name=f"transcript_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                    mime="application/json"
+                )
+                
+                # Maak ook een samenvatting PDF (als CSV voor nu)
+                summary_data = f"""
+Transcript Report Samenvatting
+Generated: {report['generated_at']}
+
+OVERZICHT:
+- Totaal Transcripts: {report['total_transcripts']}
+- Totaal Evaluaties: {report['total_evaluation_results']}
+
+AI PERFORMANCE:
+- Fouten gedetecteerd: {report['ai_performance_analysis']['total_errors']}
+- Succesvolle interacties: {report['ai_performance_analysis']['total_successes']}
+- Fout percentage: {report['ai_performance_analysis']['error_rate']:.1f}%
+- Succes percentage: {report['ai_performance_analysis']['success_rate']:.1f}%
+
+HIGHLIGHTS:
+{chr(10).join(report['highlights'])}
+
+SAMPLE CONVERSATIONS:
+{chr(10).join([f"- {conv['transcript_id']}: {conv['summary']}" for conv in report['sample_conversations']])}
+"""
+                
+                st.download_button(
+                    label="📄 Download Summary (TXT)",
+                    data=summary_data,
+                    file_name=f"transcript_summary_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
+                    mime="text/plain"
+                )
+            else:
+                st.warning("⚠️ Genereer eerst een rapportage")
+    
+    # Toon rapportage preview
+    if 'generated_report' in st.session_state:
+        report = st.session_state['generated_report']
+        
+        st.subheader("📊 Report Preview")
+        
+        # AI Performance Overview
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.metric("Total Transcripts", report['total_transcripts'])
+        
+        with col2:
+            st.metric("AI Errors", report['ai_performance_analysis']['total_errors'])
+        
+        with col3:
+            st.metric("AI Successes", report['ai_performance_analysis']['total_successes'])
+        
+        with col4:
+            error_rate = report['ai_performance_analysis']['error_rate']
+            st.metric("Error Rate", f"{error_rate:.1f}%")
+        
+        # Highlights
+        st.subheader("💡 Key Highlights")
+        for highlight in report['highlights']:
+            st.write(f"• {highlight}")
+        
+        # Sample conversations
+        st.subheader("🔍 Sample Conversations")
+        for conv in report['sample_conversations']:
+            with st.expander(f"Transcript {conv['transcript_id']}"):
+                st.write(f"**Session ID:** {conv['session_id']}")
+                st.write(f"**Created:** {conv['created_at']}")
+                st.write(f"**Evaluations:** {len(conv['evaluations'])}")
+                st.write(f"**Properties:** {len(conv['properties'])}")
+                st.write(f"**Summary:** {conv['summary']}")
+        
+        # AI Errors details
+        if report['ai_performance_analysis']['errors']:
+            st.subheader("🚨 AI Errors Details")
+            for error in report['ai_performance_analysis']['errors']:
+                st.write(f"• **{error['transcript_id']}**: {error['issue']}")
+
 # ===== MAIN DASHBOARD =====
 def main():
     st.set_page_config(
@@ -696,6 +942,9 @@ def main():
 
     # ===== COURSE ANALYTICS =====
     show_course_analytics(complete_data)
+    
+    # ===== COMPREHENSIVE REPORT GENERATION =====
+    show_report_generation(complete_data, df_evaluations)
     
     # ===== RAW DATA SECTIE =====
     st.header("📋 Raw Data")
