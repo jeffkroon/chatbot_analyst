@@ -1083,13 +1083,6 @@ def main():
         layout="wide"
     )
     
-    # Sidebar navigation
-    st.sidebar.title("📊 Navigation")
-    page = st.sidebar.selectbox(
-        "Choose a page:",
-        ["📈 Main Dashboard", "📝 Transcripts Archive", "📋 Report Generation"]
-    )
-    
     # Environment check
     api_key = os.getenv('VOICEFLOW_API_KEY')
     project_id = os.getenv('VOICEFLOW_PROJECT_ID')
@@ -1098,19 +1091,24 @@ def main():
         st.error("❌ VOICEFLOW_API_KEY of VOICEFLOW_PROJECT_ID niet geconfigureerd in .env")
         st.stop()
     
-    # Page routing
-    if page == "📈 Main Dashboard":
+    # Main title
+    st.title("📊 Voiceflow Analytics Dashboard")
+    st.markdown("**Alleen echte data uit de Voiceflow API**")
+    
+    # Navbar met tabs
+    tab1, tab2, tab3 = st.tabs(["📈 Main Dashboard", "📝 Transcripts Archive", "📋 Report Generation"])
+    
+    with tab1:
         show_main_dashboard()
-    elif page == "📝 Transcripts Archive":
+    
+    with tab2:
         show_transcripts_page()
-    elif page == "📋 Report Generation":
+    
+    with tab3:
         show_report_generation_page()
 
 def show_main_dashboard():
     """Toon het hoofd dashboard"""
-    st.title("📊 Voiceflow Analytics Dashboard")
-    st.markdown("**Alleen echte data uit de Voiceflow API**")
-    
     # Data ophalen
     with st.spinner("🔄 Echte Voiceflow data ophalen..."):
         complete_data = get_real_voiceflow_data()
