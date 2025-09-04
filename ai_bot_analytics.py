@@ -164,6 +164,91 @@ class AIBotAnalytics:
             logger.error(f"Fout bij ophalen transcripts: {e}")
             return []
     
+    def get_legacy_transcripts(self, 
+                             project_id: str = None,
+                             tag: str = None,
+                             date_range: str = None,
+                             start_date: str = None,
+                             end_date: str = None) -> List[Dict[str, Any]]:
+        """
+        Haal transcripts op via de legacy v2 API (echte chat gesprekken)
+        
+        Args:
+            project_id: Project ID (gebruikt self.project_id als None)
+            tag: Filter op tag (bv. 'system.reviewed')
+            date_range: Range filter ('Today', 'Yesterday', 'Last 7 Days', 'Last 30 days', 'All time')
+            start_date: Start datum (YYYY-MM-DD)
+            end_date: Eind datum (YYYY-MM-DD)
+            
+        Returns:
+            List van transcript data met echte chat gesprekken
+        """
+        if project_id is None:
+            project_id = self.project_id
+            
+        url = f"https://api.voiceflow.com/v2/transcripts/{project_id}"
+        
+        # Query parameters
+        params = {}
+        if tag:
+            params['tag'] = tag
+        if date_range:
+            params['range'] = date_range
+        if start_date:
+            params['startDate'] = start_date
+        if end_date:
+            params['endDate'] = end_date
+        
+        # Headers voor legacy API
+        headers = {
+            'Authorization': self.api_key,
+            'Accept': 'application/json'
+        }
+        
+        try:
+            response = requests.get(url, headers=headers, params=params, timeout=30)
+            response.raise_for_status()
+            
+            transcripts = response.json()
+            logger.info(f"Legacy transcripts opgehaald: {len(transcripts)} gevonden")
+            return transcripts
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Fout bij ophalen legacy transcripts: {e}")
+            if hasattr(e, 'response') and e.response is not None:
+                logger.error(f"Response status: {e.response.status_code}")
+                logger.error(f"Response body: {e.response.text}")
+            raise
+
+    def get_legacy_transcript_details(self, transcript_id: str) -> Dict[str, Any]:
+        """
+        Haal gedetailleerde transcript data op via legacy API
+        
+        Args:
+            transcript_id: ID van het transcript
+            
+        Returns:
+            Dict met volledige transcript data inclusief chat berichten
+        """
+        url = f"https://api.voiceflow.com/v2/transcripts/{transcript_id}"
+        
+        headers = {
+            'Authorization': self.api_key,
+            'Accept': 'application/json'
+        }
+        
+        try:
+            response = requests.get(url, headers=headers, timeout=30)
+            response.raise_for_status()
+            
+            data = response.json()
+            logger.info(f"Legacy transcript details opgehaald voor {transcript_id}")
+            return data
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Fout bij ophalen legacy transcript details: {e}")
+            raise
+
     def get_transcript_messages(self, transcript_id: str) -> List[Dict[str, Any]]:
         """
         Haal alleen de chat berichten op van een transcript

@@ -798,24 +798,21 @@ SAMPLE CONVERSATIONS:
 def get_transcripts_page_data(analytics, page_size=30, current_page=0):
     """Haal transcripts op voor de transcripts pagina met paginering"""
     try:
-        # Bereken skip voor paginering
-        skip = current_page * page_size
-        
-        # Haal transcripts op met paginering
-        response = analytics.get_all_project_transcripts(
-            take=page_size,
-            skip=skip,
-            order="DESC"
+        # Gebruik legacy v2 API voor echte chat transcripts
+        transcripts = analytics.get_legacy_transcripts(
+            date_range="Last 30 days"  # Laatste 30 dagen
         )
         
-        transcripts = response.get('transcripts', [])
-        total_count = response.get('total', 0)
+        # Simpele paginering (client-side)
+        start_idx = current_page * page_size
+        end_idx = start_idx + page_size
+        page_transcripts = transcripts[start_idx:end_idx]
         
         return {
-            'transcripts': transcripts,
-            'total_count': total_count,
+            'transcripts': page_transcripts,
+            'total_count': len(transcripts),
             'current_page': current_page,
-            'has_more': len(transcripts) == page_size and (skip + page_size) < total_count
+            'has_more': end_idx < len(transcripts)
         }
         
     except Exception as e:
@@ -823,28 +820,20 @@ def get_transcripts_page_data(analytics, page_size=30, current_page=0):
         return None
 
 def format_transcript_for_display(transcript):
-    """Format transcript data voor weergave"""
-    # Haal chat berichten op voor message count
-    message_count = 0
-    try:
-        analytics = AIBotAnalytics()
-        messages = analytics.get_transcript_messages(transcript.get('id', ''))
-        message_count = len(messages) if messages else 0
-    except:
-        message_count = 0
-    
+    """Format transcript data voor weergave (legacy API)"""
     return {
-        'id': transcript.get('id', 'Unknown'),
+        'id': transcript.get('_id', 'Unknown'),
         'session_id': transcript.get('sessionID', 'Unknown'),
         'created_at': transcript.get('createdAt', 'Unknown'),
-        'ended_at': transcript.get('endedAt', 'Unknown'),
-        'evaluations_count': len(transcript.get('evaluations', [])),
-        'properties_count': len(transcript.get('properties', [])),
-        'messages_count': message_count,
-        'has_recording': bool(transcript.get('recordingURL')),
-        'recording_url': transcript.get('recordingURL', ''),
-        'evaluations': transcript.get('evaluations', []),
-        'properties': transcript.get('properties', [])
+        'updated_at': transcript.get('updatedAt', 'Unknown'),
+        'browser': transcript.get('browser', 'Unknown'),
+        'device': transcript.get('device', 'Unknown'),
+        'os': transcript.get('os', 'Unknown'),
+        'tags': transcript.get('reportTags', []),
+        'unread': transcript.get('unread', False),
+        'user_name': transcript.get('user', {}).get('name', 'Unknown'),
+        'user_image': transcript.get('user', {}).get('image', ''),
+        'annotations_count': len(transcript.get('annotations', {}))
     }
 
 def show_transcript_details(transcript_data):
@@ -868,165 +857,51 @@ def show_transcript_details(transcript_data):
         # Chat Messages Section
         st.write("**💬 Chat Messages:**")
         
-        # Haal chat berichten op
+        # Haal chat berichten op via legacy API
         try:
             analytics = AIBotAnalytics()
-            messages = analytics.get_transcript_messages(transcript_data['id'])
+            transcript_details = analytics.get_legacy_transcript_details(transcript_data['id'])
             
-            if messages:
-                # Filter alleen berichten met betekenisvolle content
-                meaningful_messages = []
+            if transcript_details:
+                # Toon transcript details
+                st.write("**📋 Transcript Details:**")
+                col1, col2 = st.columns(2)
                 
-                for message in messages:
-                    message_type = message.get('type', '').lower()
-                    payload = message.get('payload', {})
-                    
-                    # Skip lege berichten
-                    if not payload or payload == {}:
-                        continue
-                    
-                    # Check voor betekenisvolle content
-                    has_content = False
-                    
-                    if message_type == 'trace':
-                        content = payload.get('text', payload.get('message', payload.get('content', '')))
-                        if content and content.strip():
-                            has_content = True
-                    elif message_type == 'action':
-                        action_name = payload.get('name', payload.get('type', ''))
-                        if action_name and action_name.strip():
-                            has_content = True
-                    elif message_type in ['text', 'message', 'user_input', 'user', 'speak', 'bot_response', 'ai_response', 'assistant', 'bot']:
-                        content = payload.get('text', payload.get('message', payload.get('content', '')))
-                        if content and content.strip():
-                            has_content = True
-                    elif message_type in ['intent', 'intent_request']:
-                        intent = payload.get('intent', payload.get('name', ''))
-                        if intent and intent.strip():
-                            has_content = True
-                    elif message_type in ['set', 'variable_set']:
-                        var_name = payload.get('name', '')
-                        var_value = payload.get('value', '')
-                        if var_name and var_name.strip():
-                            has_content = True
-                    elif message_type == 'end':
-                        has_content = True  # End messages zijn altijd betekenisvol
-                    
-                    if has_content:
-                        meaningful_messages.append(message)
+                with col1:
+                    st.write(f"**Session ID:** {transcript_details.get('sessionID', 'Unknown')}")
+                    st.write(f"**Browser:** {transcript_details.get('browser', 'Unknown')}")
+                    st.write(f"**Device:** {transcript_details.get('device', 'Unknown')}")
+                    st.write(f"**OS:** {transcript_details.get('os', 'Unknown')}")
                 
-                # Toon alleen betekenisvolle berichten
-                if meaningful_messages:
-                    for i, message in enumerate(meaningful_messages):
-                        message_type = message.get('type', '').lower()
-                        payload = message.get('payload', {})
-                        
-                        if message_type == 'trace':
-                            content = payload.get('text', payload.get('message', payload.get('content', str(payload))))
-                            st.markdown(f"""
-                            <div style="background-color: #e8f5e8; padding: 10px; border-radius: 10px; margin: 5px 0;">
-                                <strong>📊 Trace:</strong> {content}
-                            </div>
-                            """, unsafe_allow_html=True)
-                            
-                        elif message_type == 'action':
-                            action_name = payload.get('name', payload.get('type', 'Unknown action'))
-                            st.markdown(f"""
-                            <div style="background-color: #fff3e0; padding: 10px; border-radius: 10px; margin: 5px 0;">
-                                <strong>⚡ Action:</strong> {action_name}
-                            </div>
-                            """, unsafe_allow_html=True)
-                            
-                        elif message_type == 'end':
-                            st.markdown(f"""
-                            <div style="background-color: #ffebee; padding: 10px; border-radius: 10px; margin: 5px 0;">
-                                <strong>🏁 End:</strong> Conversation ended
-                            </div>
-                            """, unsafe_allow_html=True)
-                            
-                        elif message_type in ['text', 'message', 'user_input', 'user']:
-                            content = payload.get('text', payload.get('message', payload.get('content', 'No content')))
-                            st.markdown(f"""
-                            <div style="background-color: #e3f2fd; padding: 10px; border-radius: 10px; margin: 5px 0;">
-                                <strong>👤 User:</strong> {content}
-                            </div>
-                            """, unsafe_allow_html=True)
-                            
-                        elif message_type in ['speak', 'bot_response', 'ai_response', 'assistant', 'bot']:
-                            content = payload.get('text', payload.get('message', payload.get('content', 'No content')))
-                            st.markdown(f"""
-                            <div style="background-color: #f3e5f5; padding: 10px; border-radius: 10px; margin: 5px 0;">
-                                <strong>🤖 Bot:</strong> {content}
-                            </div>
-                            """, unsafe_allow_html=True)
-                            
-                        elif message_type in ['intent', 'intent_request']:
-                            intent = payload.get('intent', payload.get('name', 'Unknown intent'))
-                            st.markdown(f"""
-                            <div style="background-color: #fff3e0; padding: 10px; border-radius: 10px; margin: 5px 0;">
-                                <strong>🎯 Intent:</strong> {intent}
-                            </div>
-                            """, unsafe_allow_html=True)
-                            
-                        elif message_type in ['set', 'variable_set']:
-                            var_name = payload.get('name', 'Unknown variable')
-                            var_value = payload.get('value', 'No value')
-                            st.markdown(f"""
-                            <div style="background-color: #e8f5e8; padding: 10px; border-radius: 10px; margin: 5px 0;">
-                                <strong>📝 Variable:</strong> {var_name} = {var_value}
-                            </div>
-                            """, unsafe_allow_html=True)
-                            
-                        else:
-                            st.markdown(f"""
-                            <div style="background-color: #f5f5f5; padding: 10px; border-radius: 10px; margin: 5px 0;">
-                                <strong>❓ {message_type.title()}:</strong> {str(payload)[:200]}...
-                            </div>
-                            """, unsafe_allow_html=True)
-                    
-                    st.write(f"**📊 Meaningful Messages:** {len(meaningful_messages)} of {len(messages)} total logs")
-                else:
-                    st.info("Geen betekenisvolle chat berichten gevonden in dit transcript.")
+                with col2:
+                    st.write(f"**Created:** {transcript_details.get('createdAt', 'Unknown')}")
+                    st.write(f"**Updated:** {transcript_details.get('updatedAt', 'Unknown')}")
+                    st.write(f"**Tags:** {', '.join(transcript_details.get('reportTags', []))}")
+                    st.write(f"**Unread:** {'Yes' if transcript_details.get('unread', False) else 'No'}")
+                
+                # Toon user info als beschikbaar
+                if 'user' in transcript_details:
+                    user_info = transcript_details['user']
+                    st.write("**👤 User Info:**")
+                    st.write(f"**Name:** {user_info.get('name', 'Unknown')}")
+                    if user_info.get('image'):
+                        st.image(user_info['image'], width=100)
+                
+                # Toon annotations als beschikbaar
+                if 'annotations' in transcript_details:
+                    annotations = transcript_details['annotations']
+                    if annotations:
+                        st.write("**📝 Annotations:**")
+                        for annotation_id, annotation_data in annotations.items():
+                            st.write(f"• **{annotation_id}:** {annotation_data}")
+                
+                st.write(f"**📊 Transcript ID:** {transcript_details.get('_id', 'Unknown')}")
                 
             else:
-                st.info("Geen chat logs gevonden voor dit transcript.")
-                # Debug informatie toevoegen
-                st.write("**🔍 Debug Info:**")
-                try:
-                    analytics = AIBotAnalytics()
-                    # Probeer de reguliere transcript data op te halen
-                    url = f"{analytics.base_url}/transcript/{transcript_data['id']}"
-                    response = requests.get(url, headers=analytics._get_headers())
-                    if response.status_code == 200:
-                        data = response.json()
-                        st.write("**Available keys in response:**")
-                        st.write(list(data.keys()) if isinstance(data, dict) else "Not a dict")
-                        
-                        # Toon transcript data als die er is
-                        if 'transcript' in data:
-                            transcript_info = data['transcript']
-                            st.write("**Available keys in transcript data:**")
-                            st.write(list(transcript_info.keys()) if isinstance(transcript_info, dict) else "Not a dict")
-                            
-                            # Toon een voorbeeld van de logs data
-                            if 'logs' in transcript_info:
-                                logs_sample = transcript_info['logs'][:3] if len(transcript_info['logs']) > 3 else transcript_info['logs']
-                                st.write("**Sample logs data:**")
-                                st.write(logs_sample)
-                            
-                            st.write("**Transcript data preview:**")
-                            st.write(str(transcript_info)[:1000] + "..." if len(str(transcript_info)) > 1000 else str(transcript_info))
-                        else:
-                            st.write("**Data preview:**")
-                            st.write(str(data)[:1000] + "..." if len(str(data)) > 1000 else str(data))
-                    else:
-                        st.write(f"**API Error:** Status {response.status_code}")
-                        st.write(f"**Response:** {response.text}")
-                except Exception as e:
-                    st.write(f"**Error:** {e}")
+                st.info("Geen transcript details gevonden.")
                 
         except Exception as e:
-            st.error(f"Fout bij ophalen chat logs: {e}")
+            st.error(f"Fout bij ophalen transcript details: {e}")
             st.info("Toon alleen transcript metadata.")
         
         # Evaluations details (als backup)
@@ -1209,16 +1084,17 @@ def show_transcripts_page():
             
             with col3:
                 st.write("**📊 Stats:**")
-                st.write(f"Evals: {formatted_transcript['evaluations_count']}")
-                st.write(f"Props: {formatted_transcript['properties_count']}")
-                st.write(f"Messages: {formatted_transcript['messages_count']}")
+                st.write(f"Tags: {len(formatted_transcript['tags'])}")
+                st.write(f"Annotations: {formatted_transcript['annotations_count']}")
+                st.write(f"Unread: {'Yes' if formatted_transcript['unread'] else 'No'}")
             
             with col4:
-                st.write("**🎵 Recording:**")
-                if formatted_transcript['has_recording']:
-                    st.success("✅ Available")
+                st.write("**👤 User:**")
+                st.write(f"Name: {formatted_transcript['user_name']}")
+                if formatted_transcript['user_image']:
+                    st.success("✅ Has Image")
                 else:
-                    st.info("❌ None")
+                    st.info("❌ No Image")
             
             # Show details button
             show_transcript_details(formatted_transcript)
