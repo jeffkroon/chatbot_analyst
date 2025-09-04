@@ -874,104 +874,119 @@ def show_transcript_details(transcript_data):
             messages = analytics.get_transcript_messages(transcript_data['id'])
             
             if messages:
-                # Toon chat berichten in een mooie layout
-                for i, message in enumerate(messages):
-                    # Bepaal het type message/log
+                # Filter alleen berichten met betekenisvolle content
+                meaningful_messages = []
+                
+                for message in messages:
                     message_type = message.get('type', '').lower()
+                    payload = message.get('payload', {})
                     
-                    # Check voor verschillende soorten logs
+                    # Skip lege berichten
+                    if not payload or payload == {}:
+                        continue
+                    
+                    # Check voor betekenisvolle content
+                    has_content = False
+                    
                     if message_type == 'trace':
-                        # Trace messages - toon de trace data
-                        trace_data = message.get('payload', {})
-                        if trace_data:
-                            # Probeer verschillende velden voor trace content
-                            content = trace_data.get('text', trace_data.get('message', trace_data.get('content', str(trace_data))))
+                        content = payload.get('text', payload.get('message', payload.get('content', '')))
+                        if content and content.strip():
+                            has_content = True
+                    elif message_type == 'action':
+                        action_name = payload.get('name', payload.get('type', ''))
+                        if action_name and action_name.strip():
+                            has_content = True
+                    elif message_type in ['text', 'message', 'user_input', 'user', 'speak', 'bot_response', 'ai_response', 'assistant', 'bot']:
+                        content = payload.get('text', payload.get('message', payload.get('content', '')))
+                        if content and content.strip():
+                            has_content = True
+                    elif message_type in ['intent', 'intent_request']:
+                        intent = payload.get('intent', payload.get('name', ''))
+                        if intent and intent.strip():
+                            has_content = True
+                    elif message_type in ['set', 'variable_set']:
+                        var_name = payload.get('name', '')
+                        var_value = payload.get('value', '')
+                        if var_name and var_name.strip():
+                            has_content = True
+                    elif message_type == 'end':
+                        has_content = True  # End messages zijn altijd betekenisvol
+                    
+                    if has_content:
+                        meaningful_messages.append(message)
+                
+                # Toon alleen betekenisvolle berichten
+                if meaningful_messages:
+                    for i, message in enumerate(meaningful_messages):
+                        message_type = message.get('type', '').lower()
+                        payload = message.get('payload', {})
+                        
+                        if message_type == 'trace':
+                            content = payload.get('text', payload.get('message', payload.get('content', str(payload))))
                             st.markdown(f"""
                             <div style="background-color: #e8f5e8; padding: 10px; border-radius: 10px; margin: 5px 0;">
                                 <strong>📊 Trace:</strong> {content}
                             </div>
                             """, unsafe_allow_html=True)
-                        else:
-                            # Lege trace - skip deze
-                            continue
                             
-                    elif message_type == 'action':
-                        # Action messages - toon de action data
-                        action_data = message.get('payload', {})
-                        if action_data:
-                            action_name = action_data.get('name', action_data.get('type', 'Unknown action'))
+                        elif message_type == 'action':
+                            action_name = payload.get('name', payload.get('type', 'Unknown action'))
                             st.markdown(f"""
                             <div style="background-color: #fff3e0; padding: 10px; border-radius: 10px; margin: 5px 0;">
                                 <strong>⚡ Action:</strong> {action_name}
                             </div>
                             """, unsafe_allow_html=True)
-                        else:
-                            # Lege action - skip deze
-                            continue
                             
-                    elif message_type == 'end':
-                        # End messages
-                        st.markdown(f"""
-                        <div style="background-color: #ffebee; padding: 10px; border-radius: 10px; margin: 5px 0;">
-                            <strong>🏁 End:</strong> Conversation ended
-                        </div>
-                        """, unsafe_allow_html=True)
-                        
-                    elif message_type in ['text', 'message', 'user_input', 'user']:
-                        # User input
-                        payload = message.get('payload', {})
-                        content = payload.get('text', payload.get('message', payload.get('content', 'No content')))
-                        if not content:
-                            content = str(payload)
-                        st.markdown(f"""
-                        <div style="background-color: #e3f2fd; padding: 10px; border-radius: 10px; margin: 5px 0;">
-                            <strong>👤 User:</strong> {content}
-                        </div>
-                        """, unsafe_allow_html=True)
-                        
-                    elif message_type in ['speak', 'bot_response', 'ai_response', 'assistant', 'bot']:
-                        # Bot response
-                        payload = message.get('payload', {})
-                        content = payload.get('text', payload.get('message', payload.get('content', 'No content')))
-                        if not content:
-                            content = str(payload)
-                        st.markdown(f"""
-                        <div style="background-color: #f3e5f5; padding: 10px; border-radius: 10px; margin: 5px 0;">
-                            <strong>🤖 Bot:</strong> {content}
-                        </div>
-                        """, unsafe_allow_html=True)
-                        
-                    elif message_type in ['intent', 'intent_request']:
-                        # Intent detection
-                        payload = message.get('payload', {})
-                        intent = payload.get('intent', payload.get('name', 'Unknown intent'))
-                        st.markdown(f"""
-                        <div style="background-color: #fff3e0; padding: 10px; border-radius: 10px; margin: 5px 0;">
-                            <strong>🎯 Intent:</strong> {intent}
-                        </div>
-                        """, unsafe_allow_html=True)
-                        
-                    elif message_type in ['set', 'variable_set']:
-                        # Variable setting
-                        payload = message.get('payload', {})
-                        var_name = payload.get('name', 'Unknown variable')
-                        var_value = payload.get('value', 'No value')
-                        st.markdown(f"""
-                        <div style="background-color: #e8f5e8; padding: 10px; border-radius: 10px; margin: 5px 0;">
-                            <strong>📝 Variable:</strong> {var_name} = {var_value}
-                        </div>
-                        """, unsafe_allow_html=True)
-                        
-                    else:
-                        # Onbekend type message/log - toon meer details
-                        payload = message.get('payload', {})
-                        st.markdown(f"""
-                        <div style="background-color: #f5f5f5; padding: 10px; border-radius: 10px; margin: 5px 0;">
-                            <strong>❓ {message_type.title()}:</strong> {str(payload)[:200]}...
-                        </div>
-                        """, unsafe_allow_html=True)
-                
-                st.write(f"**📊 Total Logs:** {len(messages)}")
+                        elif message_type == 'end':
+                            st.markdown(f"""
+                            <div style="background-color: #ffebee; padding: 10px; border-radius: 10px; margin: 5px 0;">
+                                <strong>🏁 End:</strong> Conversation ended
+                            </div>
+                            """, unsafe_allow_html=True)
+                            
+                        elif message_type in ['text', 'message', 'user_input', 'user']:
+                            content = payload.get('text', payload.get('message', payload.get('content', 'No content')))
+                            st.markdown(f"""
+                            <div style="background-color: #e3f2fd; padding: 10px; border-radius: 10px; margin: 5px 0;">
+                                <strong>👤 User:</strong> {content}
+                            </div>
+                            """, unsafe_allow_html=True)
+                            
+                        elif message_type in ['speak', 'bot_response', 'ai_response', 'assistant', 'bot']:
+                            content = payload.get('text', payload.get('message', payload.get('content', 'No content')))
+                            st.markdown(f"""
+                            <div style="background-color: #f3e5f5; padding: 10px; border-radius: 10px; margin: 5px 0;">
+                                <strong>🤖 Bot:</strong> {content}
+                            </div>
+                            """, unsafe_allow_html=True)
+                            
+                        elif message_type in ['intent', 'intent_request']:
+                            intent = payload.get('intent', payload.get('name', 'Unknown intent'))
+                            st.markdown(f"""
+                            <div style="background-color: #fff3e0; padding: 10px; border-radius: 10px; margin: 5px 0;">
+                                <strong>🎯 Intent:</strong> {intent}
+                            </div>
+                            """, unsafe_allow_html=True)
+                            
+                        elif message_type in ['set', 'variable_set']:
+                            var_name = payload.get('name', 'Unknown variable')
+                            var_value = payload.get('value', 'No value')
+                            st.markdown(f"""
+                            <div style="background-color: #e8f5e8; padding: 10px; border-radius: 10px; margin: 5px 0;">
+                                <strong>📝 Variable:</strong> {var_name} = {var_value}
+                            </div>
+                            """, unsafe_allow_html=True)
+                            
+                        else:
+                            st.markdown(f"""
+                            <div style="background-color: #f5f5f5; padding: 10px; border-radius: 10px; margin: 5px 0;">
+                                <strong>❓ {message_type.title()}:</strong> {str(payload)[:200]}...
+                            </div>
+                            """, unsafe_allow_html=True)
+                    
+                    st.write(f"**📊 Meaningful Messages:** {len(meaningful_messages)} of {len(messages)} total logs")
+                else:
+                    st.info("Geen betekenisvolle chat berichten gevonden in dit transcript.")
                 
             else:
                 st.info("Geen chat logs gevonden voor dit transcript.")
