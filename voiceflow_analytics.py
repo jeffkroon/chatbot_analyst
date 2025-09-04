@@ -280,6 +280,62 @@ class VoiceflowAnalytics:
         
         return results
 
+    def get_full_transcript_data(self, transcript_id: str) -> Dict[str, Any]:
+        """
+        Haal volledige transcript data op inclusief chat berichten
+        
+        Args:
+            transcript_id: ID van het transcript
+            
+        Returns:
+            Dict met volledige transcript data inclusief messages
+        """
+        url = f"{self.base_url}/transcript/{transcript_id}"
+        
+        try:
+            response = requests.get(url, headers=self._get_headers())
+            response.raise_for_status()
+            
+            data = response.json()
+            logger.info(f"Volledige transcript data opgehaald voor {transcript_id}")
+            return data
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Fout bij ophalen volledige transcript data: {e}")
+            if hasattr(e, 'response') and e.response is not None:
+                logger.error(f"Response status: {e.response.status_code}")
+                logger.error(f"Response body: {e.response.text}")
+            raise
+
+    def get_transcript_messages(self, transcript_id: str) -> List[Dict[str, Any]]:
+        """
+        Haal alleen de chat berichten op van een transcript
+        
+        Args:
+            transcript_id: ID van het transcript
+            
+        Returns:
+            List van chat berichten
+        """
+        try:
+            full_data = self.get_full_transcript_data(transcript_id)
+            
+            # Probeer verschillende mogelijke velden voor messages
+            messages = full_data.get('messages', [])
+            if not messages:
+                messages = full_data.get('chat', [])
+            if not messages:
+                messages = full_data.get('conversation', [])
+            if not messages:
+                messages = full_data.get('interactions', [])
+            
+            logger.info(f"Chat berichten gevonden: {len(messages)} voor transcript {transcript_id}")
+            return messages
+            
+        except Exception as e:
+            logger.error(f"Fout bij ophalen chat berichten: {e}")
+            return []
+
     def get_all_project_transcripts(self, 
                                   take: int = 25, 
                                   skip: int = 0, 

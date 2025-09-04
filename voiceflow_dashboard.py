@@ -822,6 +822,15 @@ def get_transcripts_page_data(analytics, page_size=30, current_page=0):
 
 def format_transcript_for_display(transcript):
     """Format transcript data voor weergave"""
+    # Haal chat berichten op voor message count
+    message_count = 0
+    try:
+        analytics = VoiceflowAnalytics()
+        messages = analytics.get_transcript_messages(transcript.get('id', ''))
+        message_count = len(messages) if messages else 0
+    except:
+        message_count = 0
+    
     return {
         'id': transcript.get('id', 'Unknown'),
         'session_id': transcript.get('sessionID', 'Unknown'),
@@ -829,6 +838,7 @@ def format_transcript_for_display(transcript):
         'ended_at': transcript.get('endedAt', 'Unknown'),
         'evaluations_count': len(transcript.get('evaluations', [])),
         'properties_count': len(transcript.get('properties', [])),
+        'messages_count': message_count,
         'has_recording': bool(transcript.get('recordingURL')),
         'recording_url': transcript.get('recordingURL', ''),
         'evaluations': transcript.get('evaluations', []),
@@ -836,7 +846,7 @@ def format_transcript_for_display(transcript):
     }
 
 def show_transcript_details(transcript_data):
-    """Toon gedetailleerde transcript informatie"""
+    """Toon gedetailleerde transcript informatie inclusief chat berichten"""
     with st.expander(f"📋 Transcript Details - {transcript_data['id'][:8]}...", expanded=False):
         col1, col2 = st.columns(2)
         
@@ -853,7 +863,52 @@ def show_transcript_details(transcript_data):
             st.write(f"• **Properties:** {transcript_data['properties_count']}")
             st.write(f"• **Recording:** {'✅ Yes' if transcript_data['has_recording'] else '❌ No'}")
         
-        # Evaluations details
+        # Chat Messages Section
+        st.write("**💬 Chat Messages:**")
+        
+        # Haal chat berichten op
+        try:
+            analytics = VoiceflowAnalytics()
+            messages = analytics.get_transcript_messages(transcript_data['id'])
+            
+            if messages:
+                # Toon chat berichten in een mooie layout
+                for i, message in enumerate(messages):
+                    # Bepaal of het een user of bot message is
+                    is_user = message.get('type', '').lower() in ['user', 'input', 'message']
+                    is_bot = message.get('type', '').lower() in ['bot', 'assistant', 'ai', 'output']
+                    
+                    # Styling voor user vs bot messages
+                    if is_user:
+                        st.markdown(f"""
+                        <div style="background-color: #e3f2fd; padding: 10px; border-radius: 10px; margin: 5px 0;">
+                            <strong>👤 User:</strong> {message.get('content', message.get('text', message.get('message', 'No content')))}
+                        </div>
+                        """, unsafe_allow_html=True)
+                    elif is_bot:
+                        st.markdown(f"""
+                        <div style="background-color: #f3e5f5; padding: 10px; border-radius: 10px; margin: 5px 0;">
+                            <strong>🤖 Bot:</strong> {message.get('content', message.get('text', message.get('message', 'No content')))}
+                        </div>
+                        """, unsafe_allow_html=True)
+                    else:
+                        # Onbekend type message
+                        st.markdown(f"""
+                        <div style="background-color: #f5f5f5; padding: 10px; border-radius: 10px; margin: 5px 0;">
+                            <strong>❓ Unknown:</strong> {message.get('content', message.get('text', message.get('message', 'No content')))}
+                        </div>
+                        """, unsafe_allow_html=True)
+                
+                st.write(f"**📊 Total Messages:** {len(messages)}")
+                
+            else:
+                st.info("Geen chat berichten gevonden voor dit transcript.")
+                
+        except Exception as e:
+            st.error(f"Fout bij ophalen chat berichten: {e}")
+            st.info("Toon alleen transcript metadata.")
+        
+        # Evaluations details (als backup)
         if transcript_data['evaluations']:
             st.write("**🔍 Evaluations:**")
             eval_df = pd.DataFrame(transcript_data['evaluations'])
@@ -941,7 +996,7 @@ def show_transcripts_page():
     
     # Overview metrics
     st.subheader("📊 Overview")
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5 = st.columns(5)
     
     with col1:
         st.metric("Loaded Transcripts", len(st.session_state.transcripts_data))
@@ -955,6 +1010,11 @@ def show_transcripts_page():
     with col4:
         remaining = st.session_state.total_transcripts - len(st.session_state.transcripts_data)
         st.metric("Remaining", max(0, remaining))
+    
+    with col5:
+        # Bereken totaal aantal berichten
+        total_messages = sum(t.get('messages_count', 0) for t in st.session_state.transcripts_data)
+        st.metric("Total Messages", total_messages)
     
     # Search and filter
     st.subheader("🔍 Search & Filter")
@@ -1030,6 +1090,7 @@ def show_transcripts_page():
                 st.write("**📊 Stats:**")
                 st.write(f"Evals: {formatted_transcript['evaluations_count']}")
                 st.write(f"Props: {formatted_transcript['properties_count']}")
+                st.write(f"Messages: {formatted_transcript['messages_count']}")
             
             with col4:
                 st.write("**🎵 Recording:**")
@@ -1044,36 +1105,6 @@ def show_transcripts_page():
     # Load more indicator
     if st.session_state.total_transcripts > len(st.session_state.transcripts_data):
         st.info(f"📄 {st.session_state.total_transcripts - len(st.session_state.transcripts_data)} meer transcripts beschikbaar. Klik 'Load More' om meer te laden.")
-
-def show_report_generation_page():
-    """Toon de rapportage generatie pagina"""
-    st.header("📋 Comprehensive Transcript Report Generation")
-    st.markdown("Genereer een uitgebreide rapportage van alle transcripts met AI performance analyse en highlights.")
-    
-    # Environment check
-    api_key = os.getenv('VOICEFLOW_API_KEY')
-    project_id = os.getenv('VOICEFLOW_PROJECT_ID')
-    
-    if not api_key or not project_id:
-        st.error("❌ VOICEFLOW_API_KEY of VOICEFLOW_PROJECT_ID niet geconfigureerd in .env")
-        st.stop()
-    
-    # Data ophalen
-    with st.spinner("🔄 Echte Voiceflow data ophalen..."):
-        complete_data = get_real_voiceflow_data()
-        evaluations = get_evaluations_data()
-        transcripts = get_transcripts_data()
-    
-    if not complete_data:
-        st.error("❌ Kon geen data ophalen van Voiceflow API")
-        st.stop()
-    
-    # Data verwerken
-    df_transcripts = process_transcript_data(transcripts)
-    df_evaluations = process_evaluation_data(evaluations)
-    
-    # Toon rapportage generatie en download opties
-    show_report_generation(complete_data, df_evaluations)
 
 # ===== MAIN DASHBOARD =====
 def main():
@@ -1096,16 +1127,13 @@ def main():
     st.markdown("**Alleen echte data uit de Voiceflow API**")
     
     # Navbar met tabs
-    tab1, tab2, tab3 = st.tabs(["📈 Main Dashboard", "📝 Transcripts Archive", "📋 Report Generation"])
+    tab1, tab2 = st.tabs(["📈 Main Dashboard", "📝 Transcripts Archive"])
     
     with tab1:
         show_main_dashboard()
     
     with tab2:
         show_transcripts_page()
-    
-    with tab3:
-        show_report_generation_page()
 
 def show_main_dashboard():
     """Toon het hoofd dashboard"""
