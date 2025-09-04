@@ -878,35 +878,82 @@ def show_transcript_details(transcript_data):
                 for i, message in enumerate(messages):
                     # Bepaal het type message/log
                     message_type = message.get('type', '').lower()
-                    payload = message.get('payload', {})
                     
                     # Check voor verschillende soorten logs
-                    if message_type in ['text', 'message', 'user_input']:
+                    if message_type == 'trace':
+                        # Trace messages - toon de trace data
+                        trace_data = message.get('payload', {})
+                        if trace_data:
+                            # Probeer verschillende velden voor trace content
+                            content = trace_data.get('text', trace_data.get('message', trace_data.get('content', str(trace_data))))
+                            st.markdown(f"""
+                            <div style="background-color: #e8f5e8; padding: 10px; border-radius: 10px; margin: 5px 0;">
+                                <strong>📊 Trace:</strong> {content}
+                            </div>
+                            """, unsafe_allow_html=True)
+                        else:
+                            # Lege trace - skip deze
+                            continue
+                            
+                    elif message_type == 'action':
+                        # Action messages - toon de action data
+                        action_data = message.get('payload', {})
+                        if action_data:
+                            action_name = action_data.get('name', action_data.get('type', 'Unknown action'))
+                            st.markdown(f"""
+                            <div style="background-color: #fff3e0; padding: 10px; border-radius: 10px; margin: 5px 0;">
+                                <strong>⚡ Action:</strong> {action_name}
+                            </div>
+                            """, unsafe_allow_html=True)
+                        else:
+                            # Lege action - skip deze
+                            continue
+                            
+                    elif message_type == 'end':
+                        # End messages
+                        st.markdown(f"""
+                        <div style="background-color: #ffebee; padding: 10px; border-radius: 10px; margin: 5px 0;">
+                            <strong>🏁 End:</strong> Conversation ended
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                    elif message_type in ['text', 'message', 'user_input', 'user']:
                         # User input
+                        payload = message.get('payload', {})
                         content = payload.get('text', payload.get('message', payload.get('content', 'No content')))
+                        if not content:
+                            content = str(payload)
                         st.markdown(f"""
                         <div style="background-color: #e3f2fd; padding: 10px; border-radius: 10px; margin: 5px 0;">
                             <strong>👤 User:</strong> {content}
                         </div>
                         """, unsafe_allow_html=True)
-                    elif message_type in ['speak', 'bot_response', 'ai_response']:
+                        
+                    elif message_type in ['speak', 'bot_response', 'ai_response', 'assistant', 'bot']:
                         # Bot response
+                        payload = message.get('payload', {})
                         content = payload.get('text', payload.get('message', payload.get('content', 'No content')))
+                        if not content:
+                            content = str(payload)
                         st.markdown(f"""
                         <div style="background-color: #f3e5f5; padding: 10px; border-radius: 10px; margin: 5px 0;">
                             <strong>🤖 Bot:</strong> {content}
                         </div>
                         """, unsafe_allow_html=True)
+                        
                     elif message_type in ['intent', 'intent_request']:
                         # Intent detection
+                        payload = message.get('payload', {})
                         intent = payload.get('intent', payload.get('name', 'Unknown intent'))
                         st.markdown(f"""
                         <div style="background-color: #fff3e0; padding: 10px; border-radius: 10px; margin: 5px 0;">
                             <strong>🎯 Intent:</strong> {intent}
                         </div>
                         """, unsafe_allow_html=True)
+                        
                     elif message_type in ['set', 'variable_set']:
                         # Variable setting
+                        payload = message.get('payload', {})
                         var_name = payload.get('name', 'Unknown variable')
                         var_value = payload.get('value', 'No value')
                         st.markdown(f"""
@@ -914,11 +961,13 @@ def show_transcript_details(transcript_data):
                             <strong>📝 Variable:</strong> {var_name} = {var_value}
                         </div>
                         """, unsafe_allow_html=True)
+                        
                     else:
-                        # Onbekend type message/log
+                        # Onbekend type message/log - toon meer details
+                        payload = message.get('payload', {})
                         st.markdown(f"""
                         <div style="background-color: #f5f5f5; padding: 10px; border-radius: 10px; margin: 5px 0;">
-                            <strong>❓ {message_type.title()}:</strong> {str(payload)[:100]}...
+                            <strong>❓ {message_type.title()}:</strong> {str(payload)[:200]}...
                         </div>
                         """, unsafe_allow_html=True)
                 
@@ -943,6 +992,13 @@ def show_transcript_details(transcript_data):
                             transcript_info = data['transcript']
                             st.write("**Available keys in transcript data:**")
                             st.write(list(transcript_info.keys()) if isinstance(transcript_info, dict) else "Not a dict")
+                            
+                            # Toon een voorbeeld van de logs data
+                            if 'logs' in transcript_info:
+                                logs_sample = transcript_info['logs'][:3] if len(transcript_info['logs']) > 3 else transcript_info['logs']
+                                st.write("**Sample logs data:**")
+                                st.write(logs_sample)
+                            
                             st.write("**Transcript data preview:**")
                             st.write(str(transcript_info)[:1000] + "..." if len(str(transcript_info)) > 1000 else str(transcript_info))
                         else:
@@ -953,7 +1009,7 @@ def show_transcript_details(transcript_data):
                         st.write(f"**Response:** {response.text}")
                 except Exception as e:
                     st.write(f"**Error:** {e}")
-        
+                
         except Exception as e:
             st.error(f"Fout bij ophalen chat logs: {e}")
             st.info("Toon alleen transcript metadata.")
