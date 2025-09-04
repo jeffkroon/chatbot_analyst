@@ -904,14 +904,17 @@ def show_transcript_details(transcript_data):
             traces = analytics.get_legacy_transcript_details(transcript_data['id'])
             
             if traces and isinstance(traces, list):
-                st.write(f"**📊 Total Traces:** {len(traces)}")
-                
                 # Parse conversation traces
                 parsed_messages = []
                 for trace in traces:
                     trace_type = trace.get('type', '')
                     payload = trace.get('payload', {})
                     start_time = trace.get('startTime', 'Unknown')
+                    
+                    # Debug: toon de eerste trace structuur
+                    if len(parsed_messages) == 0:
+                        st.write("**🔍 Debug - First trace structure:**")
+                        st.json(trace)
                     
                     if trace_type == 'text':
                         # User of assistant text message
@@ -959,15 +962,48 @@ def show_transcript_details(transcript_data):
                             'raw_trace': trace
                         })
                         
-                    else:
-                        # Other trace types
+                    elif trace_type == 'set':
+                        # Variable set
+                        var_name = payload.get('name', '')
+                        var_value = payload.get('value', '')
                         parsed_messages.append({
-                            'type': trace_type,
+                            'type': 'set',
                             'speaker': 'System',
-                            'message': str(payload),
+                            'message': f"Set {var_name} = {var_value}",
                             'timestamp': start_time,
                             'raw_trace': trace
                         })
+                        
+                    elif trace_type == 'end':
+                        # End of conversation
+                        parsed_messages.append({
+                            'type': 'end',
+                            'speaker': 'System',
+                            'message': 'Conversation ended',
+                            'timestamp': start_time,
+                            'raw_trace': trace
+                        })
+                        
+                    else:
+                        # Other trace types - check for message field in payload
+                        message = payload.get('message', '')
+                        if message:
+                            parsed_messages.append({
+                                'type': trace_type,
+                                'speaker': 'System',
+                                'message': message,
+                                'timestamp': start_time,
+                                'raw_trace': trace
+                            })
+                        else:
+                            # Fallback: show payload as string
+                            parsed_messages.append({
+                                'type': trace_type,
+                                'speaker': 'System',
+                                'message': str(payload),
+                                'timestamp': start_time,
+                                'raw_trace': trace
+                            })
                 
                 # Display conversation
                 if parsed_messages:
