@@ -319,7 +319,7 @@ class AIBotAnalytics:
 
     def get_transcript_messages(self, transcript_id: str) -> List[Dict[str, Any]]:
         """
-        Haal alleen de chat berichten op van een transcript via logs endpoint
+        Haal alleen de chat berichten op van een transcript
         
         Args:
             transcript_id: ID van het transcript
@@ -328,34 +328,38 @@ class AIBotAnalytics:
             List van chat berichten/logs
         """
         try:
-            # Probeer eerst de logs endpoint
-            try:
-                full_data = self.get_full_transcript_data(transcript_id)
-            except:
-                # Fallback naar reguliere transcript endpoint
-                url = f"{self.base_url}/transcript/{transcript_id}"
-                response = requests.get(url, headers=self._get_headers())
-                response.raise_for_status()
-                full_data = response.json()
-                logger.info(f"Fallback naar reguliere transcript endpoint voor {transcript_id}")
+            # Gebruik de reguliere transcript endpoint
+            url = f"{self.base_url}/transcript/{transcript_id}"
+            response = requests.get(url, headers=self._get_headers())
+            response.raise_for_status()
+            full_data = response.json()
+            logger.info(f"Transcript data opgehaald voor {transcript_id}")
+            
+            # De transcript data zit in een 'transcript' key
+            if 'transcript' in full_data:
+                transcript_data = full_data['transcript']
+            else:
+                transcript_data = full_data
             
             # Probeer verschillende mogelijke velden voor messages/logs
-            messages = full_data.get('logs', [])
+            messages = transcript_data.get('logs', [])
             if not messages:
-                messages = full_data.get('messages', [])
+                messages = transcript_data.get('messages', [])
             if not messages:
-                messages = full_data.get('chat', [])
+                messages = transcript_data.get('chat', [])
             if not messages:
-                messages = full_data.get('conversation', [])
+                messages = transcript_data.get('conversation', [])
             if not messages:
-                messages = full_data.get('interactions', [])
+                messages = transcript_data.get('interactions', [])
             if not messages:
-                messages = full_data.get('traces', [])
+                messages = transcript_data.get('traces', [])
             if not messages:
-                messages = full_data.get('steps', [])
+                messages = transcript_data.get('steps', [])
+            if not messages:
+                messages = transcript_data.get('events', [])
             
             logger.info(f"Chat logs gevonden: {len(messages)} voor transcript {transcript_id}")
-            logger.info(f"Available keys in full_data: {list(full_data.keys()) if isinstance(full_data, dict) else 'Not a dict'}")
+            logger.info(f"Available keys in transcript_data: {list(transcript_data.keys()) if isinstance(transcript_data, dict) else 'Not a dict'}")
             return messages
             
         except Exception as e:
