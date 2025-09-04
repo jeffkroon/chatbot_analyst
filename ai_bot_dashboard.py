@@ -927,33 +927,33 @@ def show_transcript_details(transcript_data):
             else:
                 st.info("Geen chat logs gevonden voor dit transcript.")
                 # Debug informatie toevoegen
-                with st.expander("🔍 Debug Info"):
-                    try:
-                        analytics = AIBotAnalytics()
-                        # Probeer de reguliere transcript data op te halen
-                        url = f"{analytics.base_url}/transcript/{transcript_data['id']}"
-                        response = requests.get(url, headers=analytics._get_headers())
-                        if response.status_code == 200:
-                            data = response.json()
-                            st.write("**Available keys in response:**")
-                            st.write(list(data.keys()) if isinstance(data, dict) else "Not a dict")
-                            
-                            # Toon transcript data als die er is
-                            if 'transcript' in data:
-                                transcript_info = data['transcript']
-                                st.write("**Available keys in transcript data:**")
-                                st.write(list(transcript_info.keys()) if isinstance(transcript_info, dict) else "Not a dict")
-                                st.write("**Transcript data preview:**")
-                                st.write(str(transcript_info)[:1000] + "..." if len(str(transcript_info)) > 1000 else str(transcript_info))
-                            else:
-                                st.write("**Data preview:**")
-                                st.write(str(data)[:1000] + "..." if len(str(data)) > 1000 else str(data))
+                st.write("**🔍 Debug Info:**")
+                try:
+                    analytics = AIBotAnalytics()
+                    # Probeer de reguliere transcript data op te halen
+                    url = f"{analytics.base_url}/transcript/{transcript_data['id']}"
+                    response = requests.get(url, headers=analytics._get_headers())
+                    if response.status_code == 200:
+                        data = response.json()
+                        st.write("**Available keys in response:**")
+                        st.write(list(data.keys()) if isinstance(data, dict) else "Not a dict")
+                        
+                        # Toon transcript data als die er is
+                        if 'transcript' in data:
+                            transcript_info = data['transcript']
+                            st.write("**Available keys in transcript data:**")
+                            st.write(list(transcript_info.keys()) if isinstance(transcript_info, dict) else "Not a dict")
+                            st.write("**Transcript data preview:**")
+                            st.write(str(transcript_info)[:1000] + "..." if len(str(transcript_info)) > 1000 else str(transcript_info))
                         else:
-                            st.write(f"**API Error:** Status {response.status_code}")
-                            st.write(f"**Response:** {response.text}")
-                    except Exception as e:
-                        st.write(f"**Error:** {e}")
-                
+                            st.write("**Data preview:**")
+                            st.write(str(data)[:1000] + "..." if len(str(data)) > 1000 else str(data))
+                    else:
+                        st.write(f"**API Error:** Status {response.status_code}")
+                        st.write(f"**Response:** {response.text}")
+                except Exception as e:
+                    st.write(f"**Error:** {e}")
+        
         except Exception as e:
             st.error(f"Fout bij ophalen chat logs: {e}")
             st.info("Toon alleen transcript metadata.")
