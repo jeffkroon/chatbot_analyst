@@ -282,26 +282,26 @@ class VoiceflowAnalytics:
 
     def get_full_transcript_data(self, transcript_id: str) -> Dict[str, Any]:
         """
-        Haal volledige transcript data op inclusief chat berichten
+        Haal volledige transcript data op inclusief chat berichten via "Get Transcript with Logs"
         
         Args:
             transcript_id: ID van het transcript
             
         Returns:
-            Dict met volledige transcript data inclusief messages
+            Dict met volledige transcript data inclusief logs/messages
         """
-        url = f"{self.base_url}/transcript/{transcript_id}"
+        url = f"{self.base_url}/transcript/{transcript_id}/logs"
         
         try:
             response = requests.get(url, headers=self._get_headers())
             response.raise_for_status()
             
             data = response.json()
-            logger.info(f"Volledige transcript data opgehaald voor {transcript_id}")
+            logger.info(f"Volledige transcript logs opgehaald voor {transcript_id}")
             return data
             
         except requests.exceptions.RequestException as e:
-            logger.error(f"Fout bij ophalen volledige transcript data: {e}")
+            logger.error(f"Fout bij ophalen volledige transcript logs: {e}")
             if hasattr(e, 'response') and e.response is not None:
                 logger.error(f"Response status: {e.response.status_code}")
                 logger.error(f"Response body: {e.response.text}")
@@ -309,31 +309,35 @@ class VoiceflowAnalytics:
 
     def get_transcript_messages(self, transcript_id: str) -> List[Dict[str, Any]]:
         """
-        Haal alleen de chat berichten op van een transcript
+        Haal alleen de chat berichten op van een transcript via logs endpoint
         
         Args:
             transcript_id: ID van het transcript
             
         Returns:
-            List van chat berichten
+            List van chat berichten/logs
         """
         try:
             full_data = self.get_full_transcript_data(transcript_id)
             
-            # Probeer verschillende mogelijke velden voor messages
-            messages = full_data.get('messages', [])
+            # Probeer verschillende mogelijke velden voor messages/logs
+            messages = full_data.get('logs', [])
+            if not messages:
+                messages = full_data.get('messages', [])
             if not messages:
                 messages = full_data.get('chat', [])
             if not messages:
                 messages = full_data.get('conversation', [])
             if not messages:
                 messages = full_data.get('interactions', [])
+            if not messages:
+                messages = full_data.get('traces', [])
             
-            logger.info(f"Chat berichten gevonden: {len(messages)} voor transcript {transcript_id}")
+            logger.info(f"Chat logs gevonden: {len(messages)} voor transcript {transcript_id}")
             return messages
             
         except Exception as e:
-            logger.error(f"Fout bij ophalen chat berichten: {e}")
+            logger.error(f"Fout bij ophalen chat logs: {e}")
             return []
 
     def get_all_project_transcripts(self, 

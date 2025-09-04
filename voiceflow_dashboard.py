@@ -874,38 +874,59 @@ def show_transcript_details(transcript_data):
             if messages:
                 # Toon chat berichten in een mooie layout
                 for i, message in enumerate(messages):
-                    # Bepaal of het een user of bot message is
-                    is_user = message.get('type', '').lower() in ['user', 'input', 'message']
-                    is_bot = message.get('type', '').lower() in ['bot', 'assistant', 'ai', 'output']
+                    # Bepaal het type message/log
+                    message_type = message.get('type', '').lower()
+                    payload = message.get('payload', {})
                     
-                    # Styling voor user vs bot messages
-                    if is_user:
+                    # Check voor verschillende soorten logs
+                    if message_type in ['text', 'message', 'user_input']:
+                        # User input
+                        content = payload.get('text', payload.get('message', payload.get('content', 'No content')))
                         st.markdown(f"""
                         <div style="background-color: #e3f2fd; padding: 10px; border-radius: 10px; margin: 5px 0;">
-                            <strong>👤 User:</strong> {message.get('content', message.get('text', message.get('message', 'No content')))}
+                            <strong>👤 User:</strong> {content}
                         </div>
                         """, unsafe_allow_html=True)
-                    elif is_bot:
+                    elif message_type in ['speak', 'bot_response', 'ai_response']:
+                        # Bot response
+                        content = payload.get('text', payload.get('message', payload.get('content', 'No content')))
                         st.markdown(f"""
                         <div style="background-color: #f3e5f5; padding: 10px; border-radius: 10px; margin: 5px 0;">
-                            <strong>🤖 Bot:</strong> {message.get('content', message.get('text', message.get('message', 'No content')))}
+                            <strong>🤖 Bot:</strong> {content}
+                        </div>
+                        """, unsafe_allow_html=True)
+                    elif message_type in ['intent', 'intent_request']:
+                        # Intent detection
+                        intent = payload.get('intent', payload.get('name', 'Unknown intent'))
+                        st.markdown(f"""
+                        <div style="background-color: #fff3e0; padding: 10px; border-radius: 10px; margin: 5px 0;">
+                            <strong>🎯 Intent:</strong> {intent}
+                        </div>
+                        """, unsafe_allow_html=True)
+                    elif message_type in ['set', 'variable_set']:
+                        # Variable setting
+                        var_name = payload.get('name', 'Unknown variable')
+                        var_value = payload.get('value', 'No value')
+                        st.markdown(f"""
+                        <div style="background-color: #e8f5e8; padding: 10px; border-radius: 10px; margin: 5px 0;">
+                            <strong>📝 Variable:</strong> {var_name} = {var_value}
                         </div>
                         """, unsafe_allow_html=True)
                     else:
-                        # Onbekend type message
+                        # Onbekend type message/log
                         st.markdown(f"""
                         <div style="background-color: #f5f5f5; padding: 10px; border-radius: 10px; margin: 5px 0;">
-                            <strong>❓ Unknown:</strong> {message.get('content', message.get('text', message.get('message', 'No content')))}
+                            <strong>❓ {message_type.title()}:</strong> {str(payload)[:100]}...
                         </div>
                         """, unsafe_allow_html=True)
                 
-                st.write(f"**📊 Total Messages:** {len(messages)}")
+                st.write(f"**📊 Total Logs:** {len(messages)}")
                 
             else:
-                st.info("Geen chat berichten gevonden voor dit transcript.")
+                st.info("Geen chat logs gevonden voor dit transcript.")
                 
         except Exception as e:
-            st.error(f"Fout bij ophalen chat berichten: {e}")
+            st.error(f"Fout bij ophalen chat logs: {e}")
             st.info("Toon alleen transcript metadata.")
         
         # Evaluations details (als backup)
