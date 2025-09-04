@@ -298,6 +298,8 @@ class VoiceflowAnalytics:
             
             data = response.json()
             logger.info(f"Volledige transcript logs opgehaald voor {transcript_id}")
+            logger.info(f"Response keys: {list(data.keys()) if isinstance(data, dict) else 'Not a dict'}")
+            logger.info(f"Response preview: {str(data)[:500]}...")
             return data
             
         except requests.exceptions.RequestException as e:
@@ -318,7 +320,16 @@ class VoiceflowAnalytics:
             List van chat berichten/logs
         """
         try:
-            full_data = self.get_full_transcript_data(transcript_id)
+            # Probeer eerst de logs endpoint
+            try:
+                full_data = self.get_full_transcript_data(transcript_id)
+            except:
+                # Fallback naar reguliere transcript endpoint
+                url = f"{self.base_url}/transcript/{transcript_id}"
+                response = requests.get(url, headers=self._get_headers())
+                response.raise_for_status()
+                full_data = response.json()
+                logger.info(f"Fallback naar reguliere transcript endpoint voor {transcript_id}")
             
             # Probeer verschillende mogelijke velden voor messages/logs
             messages = full_data.get('logs', [])
@@ -332,8 +343,11 @@ class VoiceflowAnalytics:
                 messages = full_data.get('interactions', [])
             if not messages:
                 messages = full_data.get('traces', [])
+            if not messages:
+                messages = full_data.get('steps', [])
             
             logger.info(f"Chat logs gevonden: {len(messages)} voor transcript {transcript_id}")
+            logger.info(f"Available keys in full_data: {list(full_data.keys()) if isinstance(full_data, dict) else 'Not a dict'}")
             return messages
             
         except Exception as e:

@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 import os
 from dotenv import load_dotenv
 from voiceflow_analytics import VoiceflowAnalytics
+import requests # Added for debug information
 
 # Load environment variables
 load_dotenv()
@@ -924,6 +925,24 @@ def show_transcript_details(transcript_data):
                 
             else:
                 st.info("Geen chat logs gevonden voor dit transcript.")
+                # Debug informatie toevoegen
+                with st.expander("🔍 Debug Info"):
+                    try:
+                        analytics = VoiceflowAnalytics()
+                        # Probeer de reguliere transcript data op te halen
+                        url = f"{analytics.base_url}/transcript/{transcript_data['id']}"
+                        response = requests.get(url, headers=analytics._get_headers())
+                        if response.status_code == 200:
+                            data = response.json()
+                            st.write("**Available keys in transcript data:**")
+                            st.write(list(data.keys()) if isinstance(data, dict) else "Not a dict")
+                            st.write("**Data preview:**")
+                            st.write(str(data)[:1000] + "..." if len(str(data)) > 1000 else str(data))
+                        else:
+                            st.write(f"**API Error:** Status {response.status_code}")
+                            st.write(f"**Response:** {response.text}")
+                    except Exception as e:
+                        st.write(f"**Error:** {e}")
                 
         except Exception as e:
             st.error(f"Fout bij ophalen chat logs: {e}")
