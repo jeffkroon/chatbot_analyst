@@ -901,72 +901,140 @@ def show_transcript_details(transcript_data):
             
             # Haal dialog data op (echte chat berichten)
             st.write("**💬 Chat Dialog:**")
-            dialog_data = analytics.get_legacy_transcript_details(transcript_data['id'])
+            traces = analytics.get_legacy_transcript_details(transcript_data['id'])
             
-            if dialog_data and isinstance(dialog_data, list):
-                st.write(f"**📊 Total Turns:** {len(dialog_data)}")
+            if traces and isinstance(traces, list):
+                st.write(f"**📊 Total Traces:** {len(traces)}")
                 
-                # Toon chat turns
-                for i, turn in enumerate(dialog_data):
-                    turn_format = turn.get('format', 'unknown')
-                    turn_type = turn.get('type', 'unknown')
-                    payload = turn.get('payload', {})
-                    start_time = turn.get('startTime', 'Unknown')
+                # Parse conversation traces
+                parsed_messages = []
+                for trace in traces:
+                    trace_type = trace.get('type', '')
+                    payload = trace.get('payload', {})
+                    start_time = trace.get('startTime', 'Unknown')
                     
-                    # Styling gebaseerd op turn type
-                    if turn_format == 'launch':
-                        st.markdown(f"""
-                        <div style="background-color: #e8f5e8; padding: 10px; border-radius: 10px; margin: 5px 0;">
-                            <strong>🚀 Launch:</strong> {turn_type} - {start_time}
-                        </div>
-                        """, unsafe_allow_html=True)
+                    if trace_type == 'text':
+                        # User of assistant text message
+                        message = payload.get('message', '') or payload.get('text', '')
+                        speaker = 'User' if payload.get('message') else 'Assistant'
+                        parsed_messages.append({
+                            'type': 'text',
+                            'speaker': speaker,
+                            'message': message,
+                            'timestamp': start_time,
+                            'raw_trace': trace
+                        })
                         
-                    elif turn_format == 'request':
-                        st.markdown(f"""
-                        <div style="background-color: #e3f2fd; padding: 10px; border-radius: 10px; margin: 5px 0;">
-                            <strong>👤 Request:</strong> {turn_type} - {start_time}
-                        </div>
-                        """, unsafe_allow_html=True)
+                    elif trace_type == 'speak':
+                        # Assistant speech/response
+                        message = payload.get('message', '')
+                        parsed_messages.append({
+                            'type': 'speak',
+                            'speaker': 'Assistant',
+                            'message': message,
+                            'timestamp': start_time,
+                            'raw_trace': trace
+                        })
                         
-                    elif turn_format == 'trace':
-                        if turn_type == 'text':
-                            content = payload.get('text', 'No content')
-                            st.markdown(f"""
-                            <div style="background-color: #f3e5f5; padding: 10px; border-radius: 10px; margin: 5px 0;">
-                                <strong>🤖 Bot Response:</strong> {content} - {start_time}
-                            </div>
-                            """, unsafe_allow_html=True)
-                            
-                        elif turn_type == 'intent':
-                            intent = payload.get('intent', 'Unknown intent')
-                            st.markdown(f"""
-                            <div style="background-color: #fff3e0; padding: 10px; border-radius: 10px; margin: 5px 0;">
-                                <strong>🎯 Intent:</strong> {intent} - {start_time}
-                            </div>
-                            """, unsafe_allow_html=True)
-                            
-                        elif turn_type == 'set':
-                            var_name = payload.get('name', 'Unknown variable')
-                            var_value = payload.get('value', 'No value')
-                            st.markdown(f"""
-                            <div style="background-color: #e8f5e8; padding: 10px; border-radius: 10px; margin: 5px 0;">
-                                <strong>📝 Variable:</strong> {var_name} = {var_value} - {start_time}
-                            </div>
-                            """, unsafe_allow_html=True)
-                            
-                        else:
-                            st.markdown(f"""
-                            <div style="background-color: #f5f5f5; padding: 10px; border-radius: 10px; margin: 5px 0;">
-                                <strong>📊 {turn_type.title()}:</strong> {str(payload)[:200]}... - {start_time}
-                            </div>
-                            """, unsafe_allow_html=True)
-                    
+                    elif trace_type == 'choice':
+                        # User choice/button click
+                        choice = payload.get('choice', '')
+                        parsed_messages.append({
+                            'type': 'choice',
+                            'speaker': 'User',
+                            'message': f"Selected: {choice}",
+                            'timestamp': start_time,
+                            'raw_trace': trace
+                        })
+                        
+                    elif trace_type == 'intent':
+                        # Intent recognition
+                        intent_name = payload.get('intent', {}).get('name', '') if isinstance(payload.get('intent'), dict) else payload.get('intent', '')
+                        confidence = payload.get('confidence', 0)
+                        parsed_messages.append({
+                            'type': 'intent',
+                            'speaker': 'System',
+                            'message': f"Intent: {intent_name} (confidence: {confidence:.2f})",
+                            'timestamp': start_time,
+                            'raw_trace': trace
+                        })
+                        
                     else:
-                        st.markdown(f"""
-                        <div style="background-color: #f5f5f5; padding: 10px; border-radius: 10px; margin: 5px 0;">
-                            <strong>❓ {turn_format.title()}:</strong> {turn_type} - {start_time}
-                        </div>
-                        """, unsafe_allow_html=True)
+                        # Other trace types
+                        parsed_messages.append({
+                            'type': trace_type,
+                            'speaker': 'System',
+                            'message': str(payload),
+                            'timestamp': start_time,
+                            'raw_trace': trace
+                        })
+                
+                # Display conversation
+                if parsed_messages:
+                    st.write(f"**📊 Parsed Messages:** {len(parsed_messages)}")
+                    
+                    # Filter options
+                    with st.expander("🔍 Filter Messages", expanded=False):
+                        speaker_filter = st.multiselect(
+                            "Filter by Speaker",
+                            options=['User', 'Assistant', 'System'],
+                            default=['User', 'Assistant', 'System']
+                        )
+                        
+                        type_filter = st.multiselect(
+                            "Filter by Type",
+                            options=list(set(msg['type'] for msg in parsed_messages)),
+                            default=list(set(msg['type'] for msg in parsed_messages))
+                        )
+                    
+                    # Apply filters
+                    filtered_messages = [
+                        msg for msg in parsed_messages 
+                        if msg['speaker'] in speaker_filter and msg['type'] in type_filter
+                    ]
+                    
+                    # Display filtered conversation
+                    for i, msg in enumerate(filtered_messages):
+                        speaker = msg.get('speaker', 'Unknown')
+                        message = msg.get('message', '')
+                        timestamp = msg.get('timestamp', '')
+                        msg_type = msg.get('type', '')
+                        
+                        # Different styling for different speakers
+                        if speaker == 'User':
+                            st.markdown(f"""
+                            <div style="background-color: #e3f2fd; padding: 10px; border-radius: 10px; margin: 5px 0; border-left: 4px solid #2196f3;">
+                                <strong>👤 User</strong> <small>({timestamp})</small><br>
+                                {message}
+                            </div>
+                            """, unsafe_allow_html=True)
+                            
+                        elif speaker == 'Assistant':
+                            st.markdown(f"""
+                            <div style="background-color: #f3e5f5; padding: 10px; border-radius: 10px; margin: 5px 0; border-left: 4px solid #9c27b0;">
+                                <strong>🤖 Assistant</strong> <small>({timestamp})</small><br>
+                                {message}
+                            </div>
+                            """, unsafe_allow_html=True)
+                            
+                        else:  # System messages
+                            st.markdown(f"""
+                            <div style="background-color: #f5f5f5; padding: 8px; border-radius: 8px; margin: 5px 0; border-left: 4px solid #757575; font-size: 0.9em;">
+                                <strong>⚙️ {speaker}</strong> <small>({msg_type}) - {timestamp}</small><br>
+                                <em>{message}</em>
+                            </div>
+                            """, unsafe_allow_html=True)
+                        
+                        # Expandable raw trace data
+                        with st.expander(f"Raw trace data #{i+1}", expanded=False):
+                            st.json(msg.get('raw_trace', {}))
+                    
+                    # Raw data view
+                    with st.expander("🔧 Raw Traces Data", expanded=False):
+                        st.json(traces)
+                        
+                else:
+                    st.info("Geen leesbare berichten gevonden in de traces.")
                 
             else:
                 st.info("Geen dialog data gevonden voor dit transcript.")
