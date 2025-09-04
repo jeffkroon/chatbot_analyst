@@ -792,16 +792,263 @@ SAMPLE CONVERSATIONS:
             for error in report['ai_performance_analysis']['errors']:
                 st.write(f"• **{error['transcript_id']}**: {error['issue']}")
 
-# ===== MAIN DASHBOARD =====
-def main():
-    st.set_page_config(
-        page_title="Voiceflow Analytics Dashboard",
-        page_icon="📊",
-        layout="wide"
-    )
+# ===== TRANSCRIPTS PAGE =====
+def get_transcripts_page_data(analytics, page_size=30, current_page=0):
+    """Haal transcripts op voor de transcripts pagina met paginering"""
+    try:
+        # Bereken skip voor paginering
+        skip = current_page * page_size
+        
+        # Haal transcripts op met paginering
+        response = analytics.get_all_project_transcripts(
+            take=page_size,
+            skip=skip,
+            order="DESC"
+        )
+        
+        transcripts = response.get('transcripts', [])
+        total_count = response.get('total', 0)
+        
+        return {
+            'transcripts': transcripts,
+            'total_count': total_count,
+            'current_page': current_page,
+            'has_more': len(transcripts) == page_size and (skip + page_size) < total_count
+        }
+        
+    except Exception as e:
+        st.error(f"Fout bij ophalen transcripts: {e}")
+        return None
+
+def format_transcript_for_display(transcript):
+    """Format transcript data voor weergave"""
+    return {
+        'id': transcript.get('id', 'Unknown'),
+        'session_id': transcript.get('sessionID', 'Unknown'),
+        'created_at': transcript.get('createdAt', 'Unknown'),
+        'ended_at': transcript.get('endedAt', 'Unknown'),
+        'evaluations_count': len(transcript.get('evaluations', [])),
+        'properties_count': len(transcript.get('properties', [])),
+        'has_recording': bool(transcript.get('recordingURL')),
+        'recording_url': transcript.get('recordingURL', ''),
+        'evaluations': transcript.get('evaluations', []),
+        'properties': transcript.get('properties', [])
+    }
+
+def show_transcript_details(transcript_data):
+    """Toon gedetailleerde transcript informatie"""
+    with st.expander(f"📋 Transcript Details - {transcript_data['id'][:8]}...", expanded=False):
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.write("**📅 Basic Info:**")
+            st.write(f"• **ID:** {transcript_data['id']}")
+            st.write(f"• **Session:** {transcript_data['session_id']}")
+            st.write(f"• **Created:** {transcript_data['created_at']}")
+            st.write(f"• **Ended:** {transcript_data['ended_at']}")
+        
+        with col2:
+            st.write("**📊 Statistics:**")
+            st.write(f"• **Evaluations:** {transcript_data['evaluations_count']}")
+            st.write(f"• **Properties:** {transcript_data['properties_count']}")
+            st.write(f"• **Recording:** {'✅ Yes' if transcript_data['has_recording'] else '❌ No'}")
+        
+        # Evaluations details
+        if transcript_data['evaluations']:
+            st.write("**🔍 Evaluations:**")
+            eval_df = pd.DataFrame(transcript_data['evaluations'])
+            st.dataframe(eval_df, use_container_width=True)
+        
+        # Properties details
+        if transcript_data['properties']:
+            st.write("**🏷️ Properties:**")
+            prop_df = pd.DataFrame(transcript_data['properties'])
+            st.dataframe(prop_df, use_container_width=True)
+        
+        # Recording link
+        if transcript_data['has_recording'] and transcript_data['recording_url']:
+            st.write("**🎵 Recording:**")
+            st.link_button("🔗 Listen to Recording", transcript_data['recording_url'])
+
+def show_transcripts_page():
+    """Toon de transcripts pagina met lazy loading"""
+    st.header("📝 Transcripts Archive")
+    st.markdown("Bekijk alle transcripts uit de Voiceflow API met gedetailleerde informatie.")
     
-    st.title("📊 Voiceflow Analytics Dashboard")
-    st.markdown("**Alleen echte data uit de Voiceflow API**")
+    # Initialize session state voor paginering
+    if 'transcripts_page' not in st.session_state:
+        st.session_state.transcripts_page = 0
+    if 'transcripts_data' not in st.session_state:
+        st.session_state.transcripts_data = []
+    if 'total_transcripts' not in st.session_state:
+        st.session_state.total_transcripts = 0
+    
+    # API check
+    api_key = os.getenv('VOICEFLOW_API_KEY')
+    project_id = os.getenv('VOICEFLOW_PROJECT_ID')
+    
+    if not api_key or not project_id:
+        st.error("❌ VOICEFLOW_API_KEY of VOICEFLOW_PROJECT_ID niet geconfigureerd")
+        return
+    
+    # Initialize analytics
+    try:
+        analytics = VoiceflowAnalytics()
+    except Exception as e:
+        st.error(f"❌ Fout bij initialiseren analytics: {e}")
+        return
+    
+    # Load more button
+    col1, col2, col3 = st.columns([1, 2, 1])
+    
+    with col2:
+        if st.button("🔄 Load More Transcripts", type="primary"):
+            with st.spinner("Laden van meer transcripts..."):
+                page_data = get_transcripts_page_data(
+                    analytics, 
+                    page_size=30, 
+                    current_page=st.session_state.transcripts_page
+                )
+                
+                if page_data and page_data['transcripts']:
+                    st.session_state.transcripts_data.extend(page_data['transcripts'])
+                    st.session_state.transcripts_page += 1
+                    st.session_state.total_transcripts = page_data['total_count']
+                    st.success(f"✅ {len(page_data['transcripts'])} transcripts geladen!")
+                else:
+                    st.warning("⚠️ Geen meer transcripts beschikbaar")
+    
+    # Reset button
+    with col3:
+        if st.button("🔄 Reset"):
+            st.session_state.transcripts_page = 0
+            st.session_state.transcripts_data = []
+            st.session_state.total_transcripts = 0
+            st.rerun()
+    
+    # Load initial data if empty
+    if not st.session_state.transcripts_data:
+        with st.spinner("Laden van eerste 30 transcripts..."):
+            page_data = get_transcripts_page_data(analytics, page_size=30, current_page=0)
+            
+            if page_data and page_data['transcripts']:
+                st.session_state.transcripts_data = page_data['transcripts']
+                st.session_state.transcripts_page = 1
+                st.session_state.total_transcripts = page_data['total_count']
+            else:
+                st.error("❌ Kon geen transcripts ophalen")
+                return
+    
+    # Overview metrics
+    st.subheader("📊 Overview")
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric("Loaded Transcripts", len(st.session_state.transcripts_data))
+    
+    with col2:
+        st.metric("Total Available", st.session_state.total_transcripts)
+    
+    with col3:
+        st.metric("Current Page", st.session_state.transcripts_page)
+    
+    with col4:
+        remaining = st.session_state.total_transcripts - len(st.session_state.transcripts_data)
+        st.metric("Remaining", max(0, remaining))
+    
+    # Search and filter
+    st.subheader("🔍 Search & Filter")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        search_term = st.text_input("🔍 Search by Session ID or Transcript ID", placeholder="Enter ID...")
+    
+    with col2:
+        filter_evaluations = st.multiselect(
+            "📊 Filter by Evaluation Type",
+            options=["All", "AI course chosen", "Conversation quality", "User satisfaction"],
+            default=["All"]
+        )
+    
+    # Filter transcripts
+    filtered_transcripts = st.session_state.transcripts_data
+    
+    # Apply search filter
+    if search_term:
+        filtered_transcripts = [
+            t for t in filtered_transcripts 
+            if search_term.lower() in t.get('sessionID', '').lower() 
+            or search_term.lower() in t.get('id', '').lower()
+        ]
+    
+    # Apply evaluation filter
+    if "All" not in filter_evaluations:
+        filtered_transcripts = [
+            t for t in filtered_transcripts
+            if any(eval_item.get('name') in filter_evaluations 
+                   for eval_item in t.get('evaluations', []))
+        ]
+    
+    # Display transcripts
+    st.subheader(f"📝 Transcripts ({len(filtered_transcripts)} shown)")
+    
+    if not filtered_transcripts:
+        st.info("Geen transcripts gevonden met de huidige filters.")
+        return
+    
+    # Sort by creation date (newest first)
+    filtered_transcripts.sort(key=lambda x: x.get('createdAt', ''), reverse=True)
+    
+    # Display each transcript
+    for i, transcript in enumerate(filtered_transcripts):
+        formatted_transcript = format_transcript_for_display(transcript)
+        
+        # Create a card-like display
+        with st.container():
+            st.markdown("---")
+            
+            col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
+            
+            with col1:
+                st.write(f"**📝 Transcript {i+1}**")
+                st.write(f"**ID:** {formatted_transcript['id'][:12]}...")
+                st.write(f"**Session:** {formatted_transcript['session_id'][:12]}...")
+            
+            with col2:
+                st.write("**📅 Created:**")
+                created_date = formatted_transcript['created_at']
+                if created_date != 'Unknown':
+                    try:
+                        date_obj = datetime.fromisoformat(created_date.replace('Z', '+00:00'))
+                        st.write(date_obj.strftime("%Y-%m-%d %H:%M"))
+                    except:
+                        st.write(created_date)
+                else:
+                    st.write("Unknown")
+            
+            with col3:
+                st.write("**📊 Stats:**")
+                st.write(f"Evals: {formatted_transcript['evaluations_count']}")
+                st.write(f"Props: {formatted_transcript['properties_count']}")
+            
+            with col4:
+                st.write("**🎵 Recording:**")
+                if formatted_transcript['has_recording']:
+                    st.success("✅ Available")
+                else:
+                    st.info("❌ None")
+            
+            # Show details button
+            show_transcript_details(formatted_transcript)
+    
+    # Load more indicator
+    if st.session_state.total_transcripts > len(st.session_state.transcripts_data):
+        st.info(f"📄 {st.session_state.total_transcripts - len(st.session_state.transcripts_data)} meer transcripts beschikbaar. Klik 'Load More' om meer te laden.")
+
+def show_report_generation_page():
+    """Toon de rapportage generatie pagina"""
+    st.header("📋 Comprehensive Transcript Report Generation")
+    st.markdown("Genereer een uitgebreide rapportage van alle transcripts met AI performance analyse en highlights.")
     
     # Environment check
     api_key = os.getenv('VOICEFLOW_API_KEY')
@@ -810,6 +1057,59 @@ def main():
     if not api_key or not project_id:
         st.error("❌ VOICEFLOW_API_KEY of VOICEFLOW_PROJECT_ID niet geconfigureerd in .env")
         st.stop()
+    
+    # Data ophalen
+    with st.spinner("🔄 Echte Voiceflow data ophalen..."):
+        complete_data = get_real_voiceflow_data()
+        evaluations = get_evaluations_data()
+        transcripts = get_transcripts_data()
+    
+    if not complete_data:
+        st.error("❌ Kon geen data ophalen van Voiceflow API")
+        st.stop()
+    
+    # Data verwerken
+    df_transcripts = process_transcript_data(transcripts)
+    df_evaluations = process_evaluation_data(evaluations)
+    
+    # Toon rapportage generatie en download opties
+    show_report_generation(complete_data, df_evaluations)
+
+# ===== MAIN DASHBOARD =====
+def main():
+    st.set_page_config(
+        page_title="Voiceflow Analytics Dashboard",
+        page_icon="📊",
+        layout="wide"
+    )
+    
+    # Sidebar navigation
+    st.sidebar.title("📊 Navigation")
+    page = st.sidebar.selectbox(
+        "Choose a page:",
+        ["📈 Main Dashboard", "📝 Transcripts Archive", "📋 Report Generation"]
+    )
+    
+    # Environment check
+    api_key = os.getenv('VOICEFLOW_API_KEY')
+    project_id = os.getenv('VOICEFLOW_PROJECT_ID')
+    
+    if not api_key or not project_id:
+        st.error("❌ VOICEFLOW_API_KEY of VOICEFLOW_PROJECT_ID niet geconfigureerd in .env")
+        st.stop()
+    
+    # Page routing
+    if page == "📈 Main Dashboard":
+        show_main_dashboard()
+    elif page == "📝 Transcripts Archive":
+        show_transcripts_page()
+    elif page == "📋 Report Generation":
+        show_report_generation_page()
+
+def show_main_dashboard():
+    """Toon het hoofd dashboard"""
+    st.title("📊 Voiceflow Analytics Dashboard")
+    st.markdown("**Alleen echte data uit de Voiceflow API**")
     
     # Data ophalen
     with st.spinner("🔄 Echte Voiceflow data ophalen..."):
@@ -945,6 +1245,9 @@ def main():
     
     # ===== COMPREHENSIVE REPORT GENERATION =====
     show_report_generation(complete_data, df_evaluations)
+    
+    # ===== TRANSCRIPTS PAGE =====
+    # show_transcripts_page() # This is now handled by the main function's page routing
     
     # ===== RAW DATA SECTIE =====
     st.header("📋 Raw Data")
