@@ -220,6 +220,35 @@ class AIBotAnalytics:
                 logger.error(f"Response body: {e.response.text}")
             raise
 
+    def get_legacy_transcript_metadata(self, transcript_id: str) -> Dict[str, Any]:
+        """
+        Haal transcript metadata op via legacy API (basis info zonder dialog)
+        
+        Args:
+            transcript_id: ID van het transcript
+            
+        Returns:
+            Dict met transcript metadata (session info, user info, etc.)
+        """
+        url = f"https://api.voiceflow.com/v2/transcripts/{transcript_id}"
+        
+        headers = {
+            'Authorization': self.api_key,
+            'Accept': 'application/json'
+        }
+        
+        try:
+            response = requests.get(url, headers=headers, timeout=30)
+            response.raise_for_status()
+            
+            data = response.json()
+            logger.info(f"Legacy transcript metadata opgehaald voor {transcript_id}")
+            return data
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Fout bij ophalen legacy transcript metadata: {e}")
+            raise
+
     def get_legacy_transcript_details(self, transcript_id: str) -> Dict[str, Any]:
         """
         Haal gedetailleerde transcript data op via legacy API

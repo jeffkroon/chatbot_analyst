@@ -857,51 +857,122 @@ def show_transcript_details(transcript_data):
         # Chat Messages Section
         st.write("**💬 Chat Messages:**")
         
-        # Haal chat berichten op via legacy API
+        # Haal transcript metadata en dialog op via legacy API
         try:
             analytics = AIBotAnalytics()
-            transcript_details = analytics.get_legacy_transcript_details(transcript_data['id'])
             
-            if transcript_details:
-                # Toon transcript details
-                st.write("**📋 Transcript Details:**")
+            # Haal metadata op (basis info)
+            transcript_metadata = analytics.get_legacy_transcript_metadata(transcript_data['id'])
+            
+            if transcript_metadata:
+                # Toon transcript metadata
+                st.write("**📋 Transcript Metadata:**")
                 col1, col2 = st.columns(2)
                 
                 with col1:
-                    st.write(f"**Session ID:** {transcript_details.get('sessionID', 'Unknown')}")
-                    st.write(f"**Browser:** {transcript_details.get('browser', 'Unknown')}")
-                    st.write(f"**Device:** {transcript_details.get('device', 'Unknown')}")
-                    st.write(f"**OS:** {transcript_details.get('os', 'Unknown')}")
+                    st.write(f"**Session ID:** {transcript_metadata.get('sessionID', 'Unknown')}")
+                    st.write(f"**Browser:** {transcript_metadata.get('browser', 'Unknown')}")
+                    st.write(f"**Device:** {transcript_metadata.get('device', 'Unknown')}")
+                    st.write(f"**OS:** {transcript_metadata.get('os', 'Unknown')}")
                 
                 with col2:
-                    st.write(f"**Created:** {transcript_details.get('createdAt', 'Unknown')}")
-                    st.write(f"**Updated:** {transcript_details.get('updatedAt', 'Unknown')}")
-                    st.write(f"**Tags:** {', '.join(transcript_details.get('reportTags', []))}")
-                    st.write(f"**Unread:** {'Yes' if transcript_details.get('unread', False) else 'No'}")
+                    st.write(f"**Created:** {transcript_metadata.get('createdAt', 'Unknown')}")
+                    st.write(f"**Updated:** {transcript_metadata.get('updatedAt', 'Unknown')}")
+                    st.write(f"**Tags:** {', '.join(transcript_metadata.get('reportTags', []))}")
+                    st.write(f"**Unread:** {'Yes' if transcript_metadata.get('unread', False) else 'No'}")
                 
                 # Toon user info als beschikbaar
-                if 'user' in transcript_details:
-                    user_info = transcript_details['user']
+                if 'user' in transcript_metadata:
+                    user_info = transcript_metadata['user']
                     st.write("**👤 User Info:**")
                     st.write(f"**Name:** {user_info.get('name', 'Unknown')}")
                     if user_info.get('image'):
                         st.image(user_info['image'], width=100)
                 
                 # Toon annotations als beschikbaar
-                if 'annotations' in transcript_details:
-                    annotations = transcript_details['annotations']
+                if 'annotations' in transcript_metadata:
+                    annotations = transcript_metadata['annotations']
                     if annotations:
                         st.write("**📝 Annotations:**")
                         for annotation_id, annotation_data in annotations.items():
                             st.write(f"• **{annotation_id}:** {annotation_data}")
                 
-                st.write(f"**📊 Transcript ID:** {transcript_details.get('_id', 'Unknown')}")
+                st.write(f"**📊 Transcript ID:** {transcript_metadata.get('_id', 'Unknown')}")
+            
+            # Haal dialog data op (echte chat berichten)
+            st.write("**💬 Chat Dialog:**")
+            dialog_data = analytics.get_legacy_transcript_details(transcript_data['id'])
+            
+            if dialog_data and isinstance(dialog_data, list):
+                st.write(f"**📊 Total Turns:** {len(dialog_data)}")
+                
+                # Toon chat turns
+                for i, turn in enumerate(dialog_data):
+                    turn_format = turn.get('format', 'unknown')
+                    turn_type = turn.get('type', 'unknown')
+                    payload = turn.get('payload', {})
+                    start_time = turn.get('startTime', 'Unknown')
+                    
+                    # Styling gebaseerd op turn type
+                    if turn_format == 'launch':
+                        st.markdown(f"""
+                        <div style="background-color: #e8f5e8; padding: 10px; border-radius: 10px; margin: 5px 0;">
+                            <strong>🚀 Launch:</strong> {turn_type} - {start_time}
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                    elif turn_format == 'request':
+                        st.markdown(f"""
+                        <div style="background-color: #e3f2fd; padding: 10px; border-radius: 10px; margin: 5px 0;">
+                            <strong>👤 Request:</strong> {turn_type} - {start_time}
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                    elif turn_format == 'trace':
+                        if turn_type == 'text':
+                            content = payload.get('text', 'No content')
+                            st.markdown(f"""
+                            <div style="background-color: #f3e5f5; padding: 10px; border-radius: 10px; margin: 5px 0;">
+                                <strong>🤖 Bot Response:</strong> {content} - {start_time}
+                            </div>
+                            """, unsafe_allow_html=True)
+                            
+                        elif turn_type == 'intent':
+                            intent = payload.get('intent', 'Unknown intent')
+                            st.markdown(f"""
+                            <div style="background-color: #fff3e0; padding: 10px; border-radius: 10px; margin: 5px 0;">
+                                <strong>🎯 Intent:</strong> {intent} - {start_time}
+                            </div>
+                            """, unsafe_allow_html=True)
+                            
+                        elif turn_type == 'set':
+                            var_name = payload.get('name', 'Unknown variable')
+                            var_value = payload.get('value', 'No value')
+                            st.markdown(f"""
+                            <div style="background-color: #e8f5e8; padding: 10px; border-radius: 10px; margin: 5px 0;">
+                                <strong>📝 Variable:</strong> {var_name} = {var_value} - {start_time}
+                            </div>
+                            """, unsafe_allow_html=True)
+                            
+                        else:
+                            st.markdown(f"""
+                            <div style="background-color: #f5f5f5; padding: 10px; border-radius: 10px; margin: 5px 0;">
+                                <strong>📊 {turn_type.title()}:</strong> {str(payload)[:200]}... - {start_time}
+                            </div>
+                            """, unsafe_allow_html=True)
+                    
+                    else:
+                        st.markdown(f"""
+                        <div style="background-color: #f5f5f5; padding: 10px; border-radius: 10px; margin: 5px 0;">
+                            <strong>❓ {turn_format.title()}:</strong> {turn_type} - {start_time}
+                        </div>
+                        """, unsafe_allow_html=True)
                 
             else:
-                st.info("Geen transcript details gevonden.")
+                st.info("Geen dialog data gevonden voor dit transcript.")
                 
         except Exception as e:
-            st.error(f"Fout bij ophalen transcript details: {e}")
+            st.error(f"Fout bij ophalen transcript data: {e}")
             st.info("Toon alleen transcript metadata.")
         
         # Evaluations details (als backup)
