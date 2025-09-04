@@ -1123,36 +1123,6 @@ def show_main_dashboard():
     df_transcripts = process_transcript_data(transcripts)
     df_evaluations = process_evaluation_data(evaluations)
     
-    # ===== API STATUS SECTIE =====
-    st.header("🔌 API Status")
-    
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        if complete_data:
-            st.success("✅ Voiceflow Analytics API")
-            st.metric("Status", "Actief")
-            st.metric("Transcripts", complete_data.get('summary', {}).get('total_transcripts', 0))
-        else:
-            st.error("❌ Voiceflow Analytics API")
-            st.metric("Status", "Error")
-    
-    with col2:
-        if evaluations:
-            st.success("✅ Evaluations API")
-            st.metric("Evaluations", len(evaluations))
-        else:
-            st.warning("⚠️ Evaluations API")
-            st.metric("Status", "Niet beschikbaar")
-    
-    with col3:
-        if transcripts:
-            st.success("✅ Transcripts API")
-            st.metric("Transcripts", len(transcripts))
-        else:
-            st.warning("⚠️ Transcripts API")
-            st.metric("Status", "Niet beschikbaar")
-    
     # ===== METRICS SECTIE =====
     st.header("📊 Overzicht Metrics")
     
