@@ -901,56 +901,103 @@ def show_transcript_details(transcript_data):
             
             # Haal dialog data op (echte chat berichten)
             st.write("**💬 Chat Dialog:**")
-            traces = analytics.get_legacy_transcript_details(transcript_data['id'])
             
-            if traces and isinstance(traces, list):
-                # Parse conversation traces
+            if transcript_metadata and 'logs' in transcript_metadata:
+                logs = transcript_metadata['logs']
+                st.write(f"**📊 Total Logs:** {len(logs)}")
+                
+                # Parse conversation logs
                 parsed_messages = []
-                for trace in traces:
-                    trace_type = trace.get('type', '')
-                    payload = trace.get('payload', {})
-                    start_time = trace.get('startTime', 'Unknown')
+                for log in logs:
+                    log_type = log.get('type', '')
+                    payload = log.get('payload', {})
+                    timestamp = log.get('timestamp', log.get('time', 'Unknown'))
                     
-                    # Debug: toon de eerste trace structuur
+                    # Debug: toon de eerste log structuur
                     if len(parsed_messages) == 0:
-                        st.write("**🔍 Debug - First trace structure:**")
-                        st.json(trace)
+                        st.write("**🔍 Debug - First log structure:**")
+                        st.json(log)
                     
-                    if trace_type == 'text':
-                        # User of assistant text message
+                    if log_type == 'request':
+                        # User input/messages
+                        message = payload.get('message', '') or payload.get('text', '') or payload.get('input', '')
+                        parsed_messages.append({
+                            'type': 'request',
+                            'speaker': 'User',
+                            'message': message,
+                            'timestamp': timestamp,
+                            'raw_log': log
+                        })
+                        
+                    elif log_type == 'response':
+                        # Assistant responses
+                        message = payload.get('message', '') or payload.get('text', '') or payload.get('output', '')
+                        parsed_messages.append({
+                            'type': 'response',
+                            'speaker': 'Assistant',
+                            'message': message,
+                            'timestamp': timestamp,
+                            'raw_log': log
+                        })
+                        
+                    elif log_type == 'text':
+                        # Text messages (could be user or assistant)
                         message = payload.get('message', '') or payload.get('text', '')
-                        speaker = 'User' if payload.get('message') else 'Assistant'
+                        speaker = 'User' if payload.get('isUser', False) else 'Assistant'
                         parsed_messages.append({
                             'type': 'text',
                             'speaker': speaker,
                             'message': message,
-                            'timestamp': start_time,
-                            'raw_trace': trace
+                            'timestamp': timestamp,
+                            'raw_log': log
                         })
                         
-                    elif trace_type == 'speak':
-                        # Assistant speech/response
-                        message = payload.get('message', '')
+                    elif log_type == 'speak':
+                        # Assistant speech
+                        message = payload.get('message', '') or payload.get('text', '')
                         parsed_messages.append({
                             'type': 'speak',
                             'speaker': 'Assistant',
                             'message': message,
-                            'timestamp': start_time,
-                            'raw_trace': trace
+                            'timestamp': timestamp,
+                            'raw_log': log
                         })
                         
-                    elif trace_type == 'choice':
-                        # User choice/button click
-                        choice = payload.get('choice', '')
-                        parsed_messages.append({
-                            'type': 'choice',
-                            'speaker': 'User',
-                            'message': f"Selected: {choice}",
-                            'timestamp': start_time,
-                            'raw_trace': trace
-                        })
+                    elif log_type == 'trace':
+                        # Trace events with sub-types
+                        trace_type = payload.get('type', '')
+                        if trace_type == 'intent':
+                            intent_name = payload.get('intent', {}).get('name', '') if isinstance(payload.get('intent'), dict) else payload.get('intent', '')
+                            confidence = payload.get('confidence', 0)
+                            parsed_messages.append({
+                                'type': 'intent',
+                                'speaker': 'System',
+                                'message': f"Intent: {intent_name} (confidence: {confidence:.2f})",
+                                'timestamp': timestamp,
+                                'raw_log': log
+                            })
+                        elif trace_type == 'set':
+                            var_name = payload.get('name', '')
+                            var_value = payload.get('value', '')
+                            parsed_messages.append({
+                                'type': 'set',
+                                'speaker': 'System',
+                                'message': f"Set {var_name} = {var_value}",
+                                'timestamp': timestamp,
+                                'raw_log': log
+                            })
+                        else:
+                            # Other trace types
+                            message = payload.get('message', '') or str(payload)
+                            parsed_messages.append({
+                                'type': f'trace_{trace_type}',
+                                'speaker': 'System',
+                                'message': message,
+                                'timestamp': timestamp,
+                                'raw_log': log
+                            })
                         
-                    elif trace_type == 'intent':
+                    elif log_type == 'intent':
                         # Intent recognition
                         intent_name = payload.get('intent', {}).get('name', '') if isinstance(payload.get('intent'), dict) else payload.get('intent', '')
                         confidence = payload.get('confidence', 0)
@@ -958,122 +1005,114 @@ def show_transcript_details(transcript_data):
                             'type': 'intent',
                             'speaker': 'System',
                             'message': f"Intent: {intent_name} (confidence: {confidence:.2f})",
-                            'timestamp': start_time,
-                            'raw_trace': trace
-                        })
-                        
-                    elif trace_type == 'set':
-                        # Variable set
-                        var_name = payload.get('name', '')
-                        var_value = payload.get('value', '')
-                        parsed_messages.append({
-                            'type': 'set',
-                            'speaker': 'System',
-                            'message': f"Set {var_name} = {var_value}",
-                            'timestamp': start_time,
-                            'raw_trace': trace
-                        })
-                        
-                    elif trace_type == 'end':
-                        # End of conversation
-                        parsed_messages.append({
-                            'type': 'end',
-                            'speaker': 'System',
-                            'message': 'Conversation ended',
-                            'timestamp': start_time,
-                            'raw_trace': trace
+                            'timestamp': timestamp,
+                            'raw_log': log
                         })
                         
                     else:
-                        # Other trace types - check for message field in payload
-                        message = payload.get('message', '')
+                        # Other log types - check for message field in payload
+                        message = payload.get('message', '') or payload.get('text', '')
                         if message:
                             parsed_messages.append({
-                                'type': trace_type,
+                                'type': log_type,
                                 'speaker': 'System',
                                 'message': message,
-                                'timestamp': start_time,
-                                'raw_trace': trace
+                                'timestamp': timestamp,
+                                'raw_log': log
                             })
                         else:
                             # Fallback: show payload as string
                             parsed_messages.append({
-                                'type': trace_type,
+                                'type': log_type,
                                 'speaker': 'System',
                                 'message': str(payload),
-                                'timestamp': start_time,
-                                'raw_trace': trace
+                                'timestamp': timestamp,
+                                'raw_log': log
                             })
                 
                 # Display conversation
                 if parsed_messages:
-                    st.write(f"**📊 Parsed Messages:** {len(parsed_messages)}")
-                    
-                    # Filter options
-                    with st.expander("🔍 Filter Messages", expanded=False):
-                        speaker_filter = st.multiselect(
-                            "Filter by Speaker",
-                            options=['User', 'Assistant', 'System'],
-                            default=['User', 'Assistant', 'System']
-                        )
-                        
-                        type_filter = st.multiselect(
-                            "Filter by Type",
-                            options=list(set(msg['type'] for msg in parsed_messages)),
-                            default=list(set(msg['type'] for msg in parsed_messages))
-                        )
-                    
-                    # Apply filters
-                    filtered_messages = [
+                    # Filter out empty messages
+                    meaningful_messages = [
                         msg for msg in parsed_messages 
-                        if msg['speaker'] in speaker_filter and msg['type'] in type_filter
+                        if msg.get('message', '').strip() and msg.get('message') != '{}'
                     ]
                     
-                    # Display filtered conversation
-                    for i, msg in enumerate(filtered_messages):
-                        speaker = msg.get('speaker', 'Unknown')
-                        message = msg.get('message', '')
-                        timestamp = msg.get('timestamp', '')
-                        msg_type = msg.get('type', '')
-                        
-                        # Different styling for different speakers
-                        if speaker == 'User':
-                            st.markdown(f"""
-                            <div style="background-color: #e3f2fd; padding: 10px; border-radius: 10px; margin: 5px 0; border-left: 4px solid #2196f3;">
-                                <strong>👤 User</strong> <small>({timestamp})</small><br>
-                                {message}
-                            </div>
-                            """, unsafe_allow_html=True)
-                            
-                        elif speaker == 'Assistant':
-                            st.markdown(f"""
-                            <div style="background-color: #f3e5f5; padding: 10px; border-radius: 10px; margin: 5px 0; border-left: 4px solid #9c27b0;">
-                                <strong>🤖 Assistant</strong> <small>({timestamp})</small><br>
-                                {message}
-                            </div>
-                            """, unsafe_allow_html=True)
-                            
-                        else:  # System messages
-                            st.markdown(f"""
-                            <div style="background-color: #f5f5f5; padding: 8px; border-radius: 8px; margin: 5px 0; border-left: 4px solid #757575; font-size: 0.9em;">
-                                <strong>⚙️ {speaker}</strong> <small>({msg_type}) - {timestamp}</small><br>
-                                <em>{message}</em>
-                            </div>
-                            """, unsafe_allow_html=True)
-                        
-                        # Expandable raw trace data
-                        with st.expander(f"Raw trace data #{i+1}", expanded=False):
-                            st.json(msg.get('raw_trace', {}))
+                    st.write(f"**📊 Parsed Messages:** {len(parsed_messages)}")
+                    st.write(f"**📊 Meaningful Messages:** {len(meaningful_messages)}")
                     
-                    # Raw data view
-                    with st.expander("🔧 Raw Traces Data", expanded=False):
-                        st.json(traces)
+                    if meaningful_messages:
+                        # Filter options
+                        with st.expander("🔍 Filter Messages", expanded=False):
+                            speaker_filter = st.multiselect(
+                                "Filter by Speaker",
+                                options=['User', 'Assistant', 'System'],
+                                default=['User', 'Assistant', 'System']
+                            )
+                            
+                            type_filter = st.multiselect(
+                                "Filter by Type",
+                                options=list(set(msg['type'] for msg in meaningful_messages)),
+                                default=list(set(msg['type'] for msg in meaningful_messages))
+                            )
+                        
+                        # Apply filters
+                        filtered_messages = [
+                            msg for msg in meaningful_messages 
+                            if msg['speaker'] in speaker_filter and msg['type'] in type_filter
+                        ]
+                        
+                        # Display filtered conversation
+                        for i, msg in enumerate(filtered_messages):
+                            speaker = msg.get('speaker', 'Unknown')
+                            message = msg.get('message', '')
+                            timestamp = msg.get('timestamp', '')
+                            msg_type = msg.get('type', '')
+                            
+                            # Different styling for different speakers
+                            if speaker == 'User':
+                                st.markdown(f"""
+                                <div style="background-color: #e3f2fd; padding: 10px; border-radius: 10px; margin: 5px 0; border-left: 4px solid #2196f3;">
+                                    <strong>👤 User</strong> <small>({timestamp})</small><br>
+                                    {message}
+                                </div>
+                                """, unsafe_allow_html=True)
+                                
+                            elif speaker == 'Assistant':
+                                st.markdown(f"""
+                                <div style="background-color: #f3e5f5; padding: 10px; border-radius: 10px; margin: 5px 0; border-left: 4px solid #9c27b0;">
+                                    <strong>🤖 Assistant</strong> <small>({timestamp})</small><br>
+                                    {message}
+                                </div>
+                                """, unsafe_allow_html=True)
+                                
+                            else:  # System messages
+                                st.markdown(f"""
+                                <div style="background-color: #f5f5f5; padding: 8px; border-radius: 8px; margin: 5px 0; border-left: 4px solid #757575; font-size: 0.9em;">
+                                    <strong>⚙️ {speaker}</strong> <small>({msg_type}) - {timestamp}</small><br>
+                                    <em>{message}</em>
+                                </div>
+                                """, unsafe_allow_html=True)
+                            
+                            # Expandable raw log data
+                            with st.expander(f"Raw log data #{i+1}", expanded=False):
+                                st.json(msg.get('raw_log', {}))
+                        
+                        # Raw data view
+                        with st.expander("🔧 Raw Logs Data", expanded=False):
+                            st.json(logs)
+                            
+                    else:
+                        st.info("Geen betekenisvolle berichten gevonden in de logs.")
+                        st.write("**🔍 Alle logs (inclusief lege):**")
+                        for i, log in enumerate(logs):
+                            st.write(f"**Log {i+1}:** {log.get('type', 'unknown')} - {log.get('payload', {})}")
                         
                 else:
-                    st.info("Geen leesbare berichten gevonden in de traces.")
-                
+                    st.info("Geen leesbare berichten gevonden in de logs.")
+                    
             else:
-                st.info("Geen dialog data gevonden voor dit transcript.")
+                st.info("Geen logs gevonden in transcript metadata.")
                 
         except Exception as e:
             st.error(f"Fout bij ophalen transcript data: {e}")
